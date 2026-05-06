@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>E大长赢系统 - 实时信号</title>
+<style>
+  :root {
+    --bg: #0f1419;
+    --card: #1a2332;
+    --border: #2a3a50;
+    --text: #e6edf3;
+    --text-dim: #8b949e;
+    --green: #3fb950;
+    --red: #f85149;
+    --yellow: #d29922;
+    --blue: #58a6ff;
+    --purple: #bc8cff;
+    --pink: #ff7b72;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; min-height: 100vh; padding: 24px; }
+  .container { max-width: 900px; margin: 0 auto; }
+
+  /* Header */
+  .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 28px; }
+  .header h1 { font-size: 22px; font-weight: 600; letter-spacing: -0.5px; }
+  .header .meta { color: var(--text-dim); font-size: 13px; }
+  .refresh-btn { background: var(--blue); color: #fff; border: none; padding: 8px 18px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500; }
+  .refresh-btn:hover { opacity: 0.85; }
+
+  /* Summary bar */
+  .summary-bar { display: flex; gap: 12px; margin-bottom: 24px; flex-wrap: wrap; }
+  .stat-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px 20px; flex: 1; min-width: 140px; }
+  .stat-card .label { font-size: 12px; color: var(--text-dim); margin-bottom: 6px; }
+  .stat-card .value { font-size: 22px; font-weight: 700; }
+  .stat-card .value.green { color: var(--green); }
+  .stat-card .value.red { color: var(--red); }
+  .stat-card .value.yellow { color: var(--yellow); }
+  .stat-card .value.blue { color: var(--blue); }
+
+  /* Section */
+  .section { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 20px; }
+  .section-title { font-size: 14px; font-weight: 600; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+
+  /* Signal table */
+  .signal-table { width: 100%; border-collapse: collapse; }
+  .signal-table th { text-align: left; font-size: 12px; font-weight: 500; color: var(--text-dim); padding: 8px 12px; border-bottom: 1px solid var(--border); }
+  .signal-table td { padding: 12px; border-bottom: 1px solid rgba(42,58,80,0.5); font-size: 14px; vertical-align: middle; }
+  .signal-table tr:last-child td { border-bottom: none; }
+  .signal-table tr:hover { background: rgba(42,58,80,0.3); }
+  .signal-table .name { font-weight: 600; }
+  .signal-table .pe { color: var(--text-dim); font-size: 13px; }
+
+  /* Percentile bar */
+  .pct-bar-wrap { display: flex; align-items: center; gap: 10px; }
+  .pct-bar { flex: 1; height: 8px; background: rgba(255,255,255,0.08); border-radius: 4px; overflow: hidden; }
+  .pct-bar-fill { height: 100%; border-radius: 4px; transition: width 0.6s ease; }
+  .pct-val { font-size: 13px; font-weight: 600; min-width: 46px; text-align: right; }
+  .pct-zone { font-size: 11px; padding: 2px 8px; border-radius: 4px; font-weight: 500; white-space: nowrap; }
+
+  .action-badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 13px; font-weight: 600; }
+  .action-buy { background: rgba(63,185,80,0.15); color: var(--green); }
+  .action-sell { background: rgba(248,81,73,0.15); color: var(--red); }
+  .action-hold { background: rgba(210,153,34,0.15); color: var(--yellow); }
+  .action-manual { background: rgba(88,166,255,0.15); color: var(--blue); }
+
+  .pe-range { font-size: 12px; color: var(--text-dim); }
+
+  /* Psychology copy */
+  .psychology { font-size: 14px; line-height: 1.8; color: var(--text); }
+  .psychology .highlight { color: var(--blue); font-weight: 500; }
+  .psychology .warn { color: var(--yellow); font-weight: 500; }
+  .psychology .danger { color: var(--red); font-weight: 500; }
+
+  /* Portfolio */
+  .portfolio-row { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid rgba(42,58,80,0.5); }
+  .portfolio-row:last-child { border-bottom: none; }
+  .portfolio-row .left { display: flex; align-items: center; gap: 12px; }
+  .portfolio-row .name { font-weight: 600; min-width: 80px; }
+  .portfolio-row .shares { color: var(--text-dim); font-size: 13px; }
+  .portfolio-row .pnl { font-weight: 600; font-size: 14px; }
+  .portfolio-row .pnl.pos { color: var(--green); }
+  .portfolio-row .pnl.neg { color: var(--red); }
+
+  /* Grid */
+  .grid-levels { display: flex; flex-wrap: wrap; gap: 8px; }
+  .grid-level { display: flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 6px; font-size: 13px; background: rgba(255,255,255,0.05); }
+  .grid-level.filled { background: rgba(63,185,80,0.15); }
+  .grid-level .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); }
+  .grid-level.filled .dot { background: var(--green); }
+
+  /* Empty state */
+  .empty-state { text-align: center; padding: 40px; color: var(--text-dim); font-size: 14px; }
+
+  /* Loading */
+  .loading { text-align: center; padding: 40px; color: var(--text-dim); font-size: 14px; }
+  .loading::after { content: '...'; animation: dots 1.5s infinite; }
+  @keyframes dots { 0%,20%{content:'.'} 40%{content:'..'} 60%,100%{content:'...'} }
+
+  .note { font-size: 12px; color: var(--text-dim); margin-top: 12px; }
+
+  @media (max-width: 600px) {
+    body { padding: 16px; }
+    .stat-card { min-width: 120px; padding: 12px 14px; }
+    .stat-card .value { font-size: 18px; }
+    .signal-table th:nth-child(4), .signal-table td:nth-child(4) { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="header">
+    <div>
+      <h1>E大"长赢"150份计划</h1>
+      <div class="meta" id="meta">加载中...</div>
+    </div>
+    <button class="refresh-btn" onclick="loadData()">刷新数据</button>
+  </div>
+
+  <!-- 统计摘要 -->
+  <div class="summary-bar">
+    <div class="stat-card">
+      <div class="label">品种数量</div>
+      <div class="value blue" id="stat-total">-</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">买入信号</div>
+      <div class="value green" id="stat-buy">-</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">持有观望</div>
+      <div class="value yellow" id="stat-hold">-</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">综合分位</div>
+      <div class="value" id="stat-avg">-</div>
+    </div>
+  </div>
+
+  <!-- 信号表 -->
+  <div class="section">
+    <div class="section-title">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      实时估值信号
+    </div>
+    <div id="signal-loading" class="loading">正在拉取数据</div>
+    <div id="signal-table-wrap" style="display:none">
+      <table class="signal-table">
+        <thead>
+          <tr>
+            <th>品种</th>
+            <th>PE</th>
+            <th>分位区间</th>
+            <th>历史区间</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody id="signal-tbody"></tbody>
+      </table>
+    </div>
+    <div class="note">数据来源: akshare (乐咕乐股PE/PB历史)</div>
+  </div>
+
+  <!-- 持仓状态 -->
+  <div class="section">
+    <div class="section-title">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>
+      持仓状态
+    </div>
+    <div id="portfolio-content">
+      <div class="empty-state">暂无持仓记录。使用命令行 <code>python main.py execute 品种=份数</code> 录入</div>
+    </div>
+  </div>
+
+  <!-- 网格状态 -->
+  <div class="section">
+    <div class="section-title">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+      华宝油气网格
+    </div>
+    <div class="grid-levels" id="grid-content">
+      <div class="grid-level">L1 0.5225</div>
+      <div class="grid-level">L2 0.4964</div>
+      <div class="grid-level">L3 0.4716</div>
+      <div class="grid-level">L4 0.4480</div>
+      <div class="grid-level">L5 0.4256</div>
+      <div class="grid-level">L6 0.4043</div>
+      <div class="grid-level">L7 0.3841</div>
+      <div class="grid-level">L8 0.3649</div>
+      <div class="grid-level">L9 0.3467</div>
+      <div class="grid-level">L10 0.3294</div>
+    </div>
+    <div class="note">每格5%间距，当前价格0.5500（暂无触发）</div>
+  </div>
+
+  <!-- 心理话术 -->
+  <div class="section">
+    <div class="section-title">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      心理按摩
+    </div>
+    <div class="psychology" id="psychology-content">
+      <div class="loading">正在生成</div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+function pctColor(pct) {
+  const v = parseFloat(pct);
+  if (isNaN(v)) return '#8b949e';
+  if (v < 15) return '#3fb950';
+  if (v < 30) return '#56d364';
+  if (v < 50) return '#d29922';
+  if (v < 70) return '#e3b341';
+  if (v < 85) return '#f0883e';
+  return '#f85149';
+}
+
+function pctZone(pct) {
+  const v = parseFloat(pct);
+  if (isNaN(v)) return {label:'需手动', cls:'action-manual'};
+  if (v < 15) return {label:'极度低估', cls:'action-buy'};
+  if (v < 30) return {label:'低估', cls:'action-buy'};
+  if (v < 50) return {label:'偏低', cls:'action-hold'};
+  if (v < 70) return {label:'偏高', cls:'action-hold'};
+  if (v < 85) return {label:'高估', cls:'action-sell'};
+  return {label:'极度高估', cls:'action-sell'};
+}
+
+function actionLabel(action) {
+  const map = {BUY:'🟢 买入', SELL:'🔴 卖出', HOLD:'🟡 持有', '手动':'⚪ 手动'};
+  return map[action] || action;
+}
+
+function actionCls(action) {
+  const map = {BUY:'action-buy', SELL:'action-sell', HOLD:'action-hold', '手动':'action-manual'};
+  return map[action] || '';
+}
+
+function actionColor(action) {
+  const map = {BUY:'#3fb950', SELL:'#f85149', HOLD:'#d29922', '手动':'#58a6ff'};
+  return map[action] || '#8b949e';
+}
+
+async function loadData() {
+  document.getElementById('meta').textContent = '正在加载...';
+  document.getElementById('signal-loading').style.display = 'block';
+  document.getElementById('signal-table-wrap').style.display = 'none';
+  document.getElementById('psychology-content').innerHTML = '<div class="loading">正在生成</div>';
+
+  try {
+    const [statusRes, portfolioRes] = await Promise.all([
+      fetch('status.json'),
+      fetch('portfolio.json').catch(() => null)
+    ]);
+
+    const status = await statusRes.json();
+    const portfolio = portfolioRes ? await portfolioRes.json() : null;
+
+    // Meta
+    const now = new Date();
+    document.getElementById('meta').textContent =
+      `更新: ${now.toLocaleString('zh-CN')} · 数据来源: akshare`;
+
+    // Summary
+    const signals = status.signals || [];
+    document.getElementById('stat-total').textContent = signals.length;
+    document.getElementById('stat-buy').textContent = signals.filter(s => s.action === 'BUY').length;
+    document.getElementById('stat-hold').textContent = signals.filter(s => s.action === 'HOLD').length;
+
+    // Avg pct
+    const pcts = signals.map(s => parseFloat(String(s.score).replace('%',''))).filter(v => !isNaN(v));
+    const avg = pcts.length ? (pcts.reduce((a,b)=>a+b,0)/pcts.length).toFixed(0) : '-';
+    document.getElementById('stat-avg').textContent = avg + '%';
+    document.getElementById('stat-avg').style.color = pctColor(avg);
+
+    // Signal table
+    renderSignals(signals);
+
+    // Portfolio
+    renderPortfolio(portfolio, status.signals || []);
+
+    // Psychology
+    renderPsychology(avg, signals);
+
+  } catch(e) {
+    console.error(e);
+    document.getElementById('meta').textContent = '加载失败，请手动刷新';
+    document.getElementById('signal-loading').innerHTML = '<div class="empty-state">数据加载失败。请在命令行运行 <code>python main.py status</code> 生成 status.json</div>';
+  }
+}
+
+function renderSignals(signals) {
+  document.getElementById('signal-loading').style.display = 'none';
+  document.getElementById('signal-table-wrap').style.display = 'block';
+
+  const tbody = document.getElementById('signal-tbody');
+  tbody.innerHTML = '';
+
+  signals.forEach(s => {
+    const pct = String(s.score || '50').replace('%','');
+    const zone = pctZone(pct);
+    const color = pctColor(pct);
+    const hist = s.history || {};
+
+    const row = document.createElement('tr');
+    row.innerHTML = `
+      <td>
+        <div class="name">${s.name}</div>
+      </td>
+      <td class="pe">${s.pe_ttm || '-'}</td>
+      <td>
+        <div class="pct-bar-wrap">
+          <div class="pct-bar">
+            <div class="pct-bar-fill" style="width:${Math.min(pct,100)}%;background:${color}"></div>
+          </div>
+          <span class="pct-val" style="color:${color}">${pct}%</span>
+        </div>
+        <div class="pct-zone ${zone.cls}" style="margin-top:6px">${zone.label}</div>
+      </td>
+      <td class="pe-range">
+        ${hist.pe_min ? `${hist.pe_min}–${hist.pe_max}` : '-'}
+      </td>
+      <td>
+        <span class="action-badge ${zone.cls}">${actionLabel(s.action)}</span>
+      </td>
+    `;
+    tbody.appendChild(row);
+  });
+}
+
+function renderPortfolio(portfolio, signals) {
+  const el = document.getElementById('portfolio-content');
+  if (!portfolio || !portfolio.positions || Object.keys(portfolio.positions).length === 0) {
+    el.innerHTML = '<div class="empty-state">暂无持仓记录。使用 <code>python main.py execute 品种=份数</code> 录入持仓</div>';
+    return;
+  }
+
+  let html = '';
+  for (const [name, pos] of Object.entries(portfolio.positions)) {
+    const shares = pos.shares || 0;
+    if (shares <= 0) continue;
+
+    // Find signal for this name
+    const sig = signals.find(s => s.name === name);
+    const currentPrice = sig ? (sig.price || '-') : '-';
+    const avgCost = pos.avg_cost || 1;
+    const ratio = (currentPrice !== '-' && avgCost) ? (parseFloat(currentPrice) / avgCost) : 1;
+    const pnlPct = ((ratio - 1) * 100).toFixed(1);
+    const pnlClass = ratio >= 1 ? 'pos' : 'neg';
+    const pnlSign = ratio >= 1 ? '+' : '';
+
+    html += `
+      <div class="portfolio-row">
+        <div class="left">
+          <span class="name">${name}</span>
+          <span class="shares">${shares}份 · 均价 ${avgCost.toFixed(4)}</span>
+        </div>
+        <span class="pnl ${pnlClass}">${pnlSign}${pnlPct}%</span>
+      </div>
+    `;
+  }
+
+  if (!html) {
+    el.innerHTML = '<div class="empty-state">空仓</div>';
+    return;
+  }
+
+  // Summary
+  const totalShares = Object.values(portfolio.positions).reduce((a,b) => a + (b.shares||0), 0);
+  const cash = portfolio.cash || 0;
+  const pnl = portfolio.unrealized_pnl || {};
+  const totalPnl = pnl.total !== undefined ? pnl.total : 0;
+  const totalPnlPct = pnl.pct || 0;
+
+  el.innerHTML = `
+    <div style="margin-bottom:12px;padding:12px;background:rgba(255,255,255,0.04);border-radius:8px;font-size:13px;color:var(--text-dim)">
+      总持仓 ${totalShares}份 · 现金 ${cash}份 · 更新时间 ${portfolio.updated ? portfolio.updated.substring(0,10) : '-'}
+      ${totalPnl !== 0 ? `<span style="margin-left:16px;font-weight:600;color:${totalPnl>=0?'var(--green)':'var(--red)'}">浮盈亏 ${totalPnl>=0?'+':''}${totalPnl.toFixed(2)}万 (${totalPnlPct>=0?'+':''}${totalPnlPct.toFixed(1)}%)</span>` : ''}
+    </div>
+    ${html}
+  `;
+}
+
+function renderPsychology(avg, signals) {
+  const el = document.getElementById('psychology-content');
+  const v = parseFloat(avg) || 50;
+  const buys = signals.filter(s => s.action === 'BUY').length;
+  const sells = signals.filter(s => s.action === 'SELL').length;
+
+  let content = '';
+  if (v < 20) {
+    content = `<p><span class="highlight">历史性机会期</span> — 当前市场综合分位约${v}%，处于极度低估区域。</p>
+<p>多个品种已进入重仓买入区间。记住：<strong>跌得越多，买得越多</strong>。越跌越买，越长越好。</p>
+<p>本轮买入后，请做好最大跌幅的心理准备。历史上，每一次这样的时候，最终都给投资者丰厚的回报。握紧筹码，等待微笑曲线。</p>`;
+  } else if (v < 40) {
+    content = `<p><span class="highlight">正常布局期</span> — 当前市场综合分位约${v}%，处于正常偏低区域。</p>
+<p>估值有吸引力，可以继续布局。我们的目标不是在最低点买满，而是在合理价格慢慢收集筹码。<strong>越低估买越多，这才是节奏</strong>。</p>`;
+  } else if (v < 60) {
+    content = `<p><span class="warn">持有观察期</span> — 当前市场综合分位约${v}%，整体处于正常偏高区域。</p>
+<p>到了牛市，人声鼎沸，大部分时间都是噪音。如果你的操作跟大部分人一样，那收益也就跟大部分人一样 — 亏钱。<strong>保持仓位，等待高估区域的收割时机</strong>。</p>`;
+  } else {
+    content = `<p><span class="danger">收割警惕期</span> — 当前市场综合分位约${v}%，已进入高估区域。</p>
+<p>请注意逐步收割利润。牛市不是比谁赚最多，是比谁保住利润。身边的噪音会越来越大，请保持清醒。</p>`;
+  }
+
+  el.innerHTML = content;
+}
+
+// Load on page load
+loadData();
+</script>
+</body>
+</html>

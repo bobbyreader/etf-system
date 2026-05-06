@@ -2,36 +2,57 @@
 
 基于E大（ETF拯救世界）公开资料复刻的指数投资决策系统。
 
-## 系统架构
-
-```
-etf-system/
-├── main.py                      # 统一入口
-├── strategies/
-│   ├── universe.py              # 品种配置 + 估值决策表
-│   ├── valuation.py             # 估值引擎（PE/PB分位）
-│   └── grid.py                 # 网格策略 + 目标市值
-├── signals/
-│   └── monthly_signal.py        # 月度信号生成 + 心理话术
-├── backtest/
-│   └── bt_engine.py            # 历史回测验证
-└── data/                       # 历史估值数据缓存
-```
-
-## 运行
+## 快速开始
 
 ```bash
 cd etf-system
 
-python3 main.py status    # 实时状态报告
-python3 main.py signal   # 月度信号生成
-python3 main.py grid     # 网格详情
-python3 main.py backtest # 历史回测验证
+# 实时状态
+python3 main.py status
+
+# 月度信号
+python3 main.py signal
+
+# 持仓管理
+python3 main.py portfolio status
+python3 main.py execute 50ETF=5 中证红利=3
+
+# 历史回测
+python3 main.py backtest
+```
+
+## Web UI
+
+```bash
+cd web
+pip install flask
+python3 server.py
+# 访问 http://localhost:5188
+```
+
+## 系统架构
+
+```
+etf-system/
+├── main.py                 # CLI 统一入口
+├── strategies/
+│   ├── universe.py         # 品种配置 + 估值决策表
+│   ├── valuation.py        # 估值引擎（PE/PB分位）
+│   └── grid.py            # 网格策略 + 目标市值
+├── signals/
+│   └── monthly_signal.py   # 月度信号 + 心理话术
+├── backtest/
+│   └── bt_engine.py       # 回测引擎 (v3)
+├── portfolio/
+│   └── manager.py          # 持仓持久化
+└── web/
+    ├── server.py           # Flask API 服务
+    └── ui.html            # Web 前端
 ```
 
 ## 核心逻辑
 
-### 估值分位 → 操作决策（E大体系）
+### 估值分位 → 操作决策
 
 | 分位区间 | 操作 | 份数 |
 |---------|------|------|
@@ -45,23 +66,18 @@ python3 main.py backtest # 历史回测验证
 
 ### 回测验证
 
-用E大2015-2020实际交易记录验证，**决策一致率100%**。
+- 2016-2019 E大操作一致率：93% (14/15)
+- 全量月度回测 (2016-2024)：年化 -0.1%，最大回撤 -34%
+- 策略优势区间：熊市建仓（低估持续买入）
+- 量化局限：长牛市中PE分位偏低，需结合绝对价格判断止盈
 
 ## 数据来源
 
 - A股指数PE/PB历史：乐咕乐股（akshare接口）
 - ETF价格：新浪（akshare接口）
-- 港股PE：暂无免费源，用价格代理
+- 中证红利净值：东方财富场外基金接口
 
 ## 品种池
 
-宽基(PE驱动)：50ETF、中证500、中证红利、恒生ETF
-商品(手动)：黄金ETF、华宝油气
-
-## 待完善
-
-- [ ] 港股PE数据源接入
-- [ ] 历史回测收益计算
-- [ ] Web UI界面
-- [ ] 微信/推送通知
-- [ ] 养老产业/德国30 PE数据
+宽基(PE驱动)：50ETF、180ETF、深100ETF、中证500ETF、中证红利
+商品(手动参考)：黄金ETF、华宝油气、恒生ETF、养老产业、德国30
