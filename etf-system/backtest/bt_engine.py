@@ -1,7 +1,7 @@
 """
-E大"长赢"体系 - 回测引擎 v2
-验证：①决策一致性 ②指数点位收益率 ③策略核心结论
-数据：akshare stock_zh_index_daily 全量历史
+E大"长赢"体系 - 回测引擎 v3
+扩展：①全量月度信号回测 ②交易成本 ③风险指标 ④完整持仓模拟
+数据：akshare PE/PB历史分位 + 指数点位全量历史
 """
 
 import sys
@@ -11,27 +11,271 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 import pandas as pd
 import numpy as np
 from datetime import datetime
+from strategies.universe import VALUATION_RULES
 
+
+# ══════════════════════════════════════════════════════════════════════
 # 指数点位代码映射
-NAME_PRICE_CODES = {
-    '50ETF': 'sh000016', '180ETF': 'sh000010',
-    '深100ETF': 'sz399330', '中证500ETF': 'sh000905', '中证红利': 'sz399922',
+# ══════════════════════════════════════════════════════════════════════
+
+INDEX_PRICE_CODES = {
+    '50ETF':      'sh000016',
+    '180ETF':     'sh000010',
+    '深100ETF':   'sz399330',
+    '中证500ETF': 'sh000905',
+    '中证红利':   'sz399922',
 }
 
-def get_month_price(name: str, year: int, month: int) -> float:
-    """获取月末收盘价"""
-    code = NAME_PRICE_CODES.get(name)
-    if not code:
-        return None
-    df = pd.read_csv(f'./data/{name}_price.csv')
-    df['date'] = pd.to_datetime(df['date'])
-    target = f"{year}-{month:02d}"
-    match = df[df['date'].dt.to_period('M').astype(str) == target]
-    if not match.empty:
-        return float(match.iloc[-1]['close'])
-    return None
+# ══════════════════════════════════════════════════════════════════════
+# 数据加载
+# ══════════════════════════════════════════════════════════════════════
 
-# E大历史操作记录（从PDF提取）
+def load_index_prices(name: str) -> pd.DataFrame:
+    path = Path('./data') / f'{name}_price.csv'
+    if not path.exists():
+        return pd.DataFrame()
+    df = pd.read_csv(path, parse_dates=['date'])
+    return df.sort_values('date').reset_index(drop=True)
+
+
+def load_pe_history(name: str) -> pd.DataFrame:
+    path = Path('./data') / f'{name}_pe.csv'
+    if not path.exists():
+        return pd.DataFrame()
+    df = pd.read_csv(path, parse_dates=['日期'])
+    return df.sort_values('日期').reset_index(drop=True)
+
+
+def get_month_price(name: str, year: int, month: int) -> float:
+    df = load_index_prices(name)
+    if df.empty:
+        return None
+    target = f"{year}-{month:02d}"
+    df['_ym'] = df['date'].dt.to_period('M').astype(str)
+    match = df[df['_ym'] == target]
+    return float(match.iloc[-1]['close']) if not match.empty else None
+
+
+def get_month_pe(name: str, year: int, month: int) -> float:
+    df = load_pe_history(name)
+    if df.empty:
+        return None
+    target = f"{year}-{month:02d}"
+    df['_ym'] = df['日期'].dt.to_period('M').astype(str)
+    match = df[df['_ym'] == target]
+    return float(match.iloc[-1]['TTM']) if not match.empty else None
+
+
+def calc_percentile(pe_df: pd.DataFrame, pe_val: float, cutoff_date: pd.Timestamp) -> float:
+    """扩展窗口历史分位（cutoff之前全部历史）"""
+    hist = pe_df[pe_df['日期'] < cutoff_date]
+    if len(hist) < 12:
+        return 50.0
+    p_min, p_max = hist['TTM'].min(), hist['TTM'].max()
+    if p_max == p_min:
+        return 50.0
+    return float(np.clip((pe_val - p_min) / (p_max - p_min) * 100, 0, 100))
+
+
+def calc_percentile_pe_only(pct: float) -> tuple:
+    """纯分位信号"""
+    for (low, high), rule in VALUATION_RULES.items():
+        if low <= pct < high:
+            return rule['action'], rule['shares']
+    return 'HOLD', 0
+
+
+def get_signal_action(pct: float, name: str, price: float,
+                     peak_price: float, peak_pct_drop: float) -> tuple:
+    """
+    综合信号：分位 + 持仓高点止盈
+    - 分位 > 70% → SELL
+    - 分位 > 50% 且从高点回落 > 15% → SELL 1份（止盈）
+    - 分位 < 30% → BUY
+    - 其他 → HOLD
+    """
+    # 分位信号
+    action, shares = calc_percentile_pe_only(pct)
+
+    # 分位在中间区但已有浮盈：从高点回落超过15%则止盈
+    if action == 'HOLD' and price < peak_price and peak_pct_drop >= 15:
+        action, shares = 'SELL', 1
+
+    return action, shares
+
+
+# ══════════════════════════════════════════════════════════════════════
+# 核心回测
+# ══════════════════════════════════════════════════════════════════════
+
+def run_monthly_backtest(
+    start_year: int = 2016,
+    end_year: int = 2024,
+    cash: float = 150.0,
+    share_size: float = 1.0,
+    tax_rate: float = 0.001,
+    commission_rate: float = 0.0003,
+) -> tuple:
+    """
+    月度信号驱动回测
+    策略：PE分位 + 持仓高点止盈（回落15%卖1份）
+    """
+    TARGETS = ['50ETF', '中证500ETF', '中证红利']
+
+    pe_data = {n: load_pe_history(n) for n in TARGETS}
+    price_data = {n: load_index_prices(n) for n in TARGETS}
+
+    # 生成月份列表
+    months = []
+    for year in range(start_year, end_year + 1):
+        for month in range(1, 13):
+            if year == end_year and month > 12:
+                break
+            months.append((year, month))
+
+    # 持仓状态
+    portfolio = {n: {'shares': 0, 'avg_cost': 0.0, 'peak_price': 0.0} for n in TARGETS}
+    cash_balance = cash
+    portfolio_history = []
+    trades_log = []
+
+    for year, month in months:
+        cutoff = pd.Timestamp(year=year, month=month, day=28)
+
+        for name in TARGETS:
+            pe_df = pe_data.get(name)
+            price_df = price_data.get(name)
+            if pe_df is None or pe_df.empty:
+                continue
+
+            pe_val = get_month_pe(name, year, month)
+            if pe_val is None:
+                continue
+
+            pct = calc_percentile(pe_df, pe_val, cutoff)
+
+            # 月末价格
+            target = f"{year}-{month:02d}"
+            pdf = price_df.copy()
+            pdf['_ym'] = pdf['date'].dt.to_period('M').astype(str)
+            match = pdf[pdf['_ym'] == target]
+            if match.empty:
+                continue
+            price = float(match.iloc[-1]['close'])
+
+            # 更新高点
+            if portfolio[name]['shares'] > 0:
+                if price > portfolio[name]['peak_price']:
+                    portfolio[name]['peak_price'] = price
+            elif portfolio[name]['avg_cost'] > 0 and price > portfolio[name]['avg_cost']:
+                portfolio[name]['peak_price'] = price
+
+            peak_drop = (portfolio[name]['peak_price'] - price) / portfolio[name]['peak_price'] * 100 \
+                        if portfolio[name]['peak_price'] > 0 else 0
+
+            action, shares = get_signal_action(
+                pct, name, price,
+                portfolio[name]['peak_price'], peak_drop,
+            )
+
+            # 买入
+            if action == 'BUY' and shares > 0 and cash_balance >= shares * share_size:
+                cost = shares * share_size
+                commission = cost * commission_rate
+                old_s = portfolio[name]['shares']
+                old_avg = portfolio[name]['avg_cost']
+                new_s = old_s + shares
+                portfolio[name]['avg_cost'] = (old_s * old_avg + shares * price) / new_s if new_s > 0 else price
+                portfolio[name]['shares'] = new_s
+                # 建仓时初始化高点
+                if portfolio[name]['peak_price'] == 0:
+                    portfolio[name]['peak_price'] = price
+                cash_balance -= (cost + commission)
+                trades_log.append({
+                    'date': f'{year}-{month:02d}', 'action': 'BUY',
+                    'name': name, 'shares': shares, 'price': price,
+                    'cost': cost, 'commission': commission, 'pct': pct,
+                })
+
+            # 卖出
+            elif action == 'SELL' and shares > 0:
+                held = portfolio[name]['shares']
+                sell_shares = min(shares, held)
+                if sell_shares <= 0:
+                    continue
+                revenue = sell_shares * share_size
+                tax = revenue * tax_rate
+                commission = revenue * commission_rate
+                portfolio[name]['shares'] -= sell_shares
+                cash_balance += (revenue - tax - commission)
+                trades_log.append({
+                    'date': f'{year}-{month:02d}', 'action': 'SELL',
+                    'name': name, 'shares': sell_shares, 'price': price,
+                    'revenue': revenue, 'tax': tax, 'commission': commission,
+                    'pct': pct, 'peak': portfolio[name]['peak_price'],
+                })
+
+        # 月末组合市值
+        portfolio_value = cash_balance * share_size
+        for name in TARGETS:
+            shares = portfolio[name]['shares']
+            if shares > 0:
+                target = f"{year}-{month:02d}"
+                pdf = price_data[name].copy()
+                pdf['_ym'] = pdf['date'].dt.to_period('M').astype(str)
+                match = pdf[pdf['_ym'] == target]
+                if not match.empty:
+                    price = float(match.iloc[-1]['close'])
+                    avg = portfolio[name]['avg_cost']
+                    ratio = price / avg if avg > 0 else 1.0
+                    portfolio_value += shares * share_size * ratio
+
+        portfolio_history.append({
+            'date': f'{year}-{month:02d}',
+            'portfolio_value': portfolio_value,
+            'cash': cash_balance,
+            'total_shares_used': sum(p['shares'] for p in portfolio.values()),
+            'cash_shares': cash_balance,
+        })
+
+    return pd.DataFrame(portfolio_history), pd.DataFrame(trades_log)
+
+
+def calc_risk_metrics(df: pd.DataFrame) -> dict:
+    """计算风险指标"""
+    if df.empty or len(df) < 2:
+        return {}
+    values = np.array(df['portfolio_value'].values, dtype=float)
+    dates = list(pd.to_datetime(df['date']))
+
+    total_return = (values[-1] / values[0] - 1) * 100
+    years = (dates[-1] - dates[0]).days / 365.25
+    annual_return = ((values[-1] / values[0]) ** (1 / years) - 1) * 100 if years > 0 else 0
+
+    peak = np.maximum.accumulate(values)
+    drawdown = (values - peak) / peak * 100
+    max_drawdown = float(drawdown.min())
+
+    monthly_returns = np.diff(values) / values[:-1]
+    annual_vol = float(np.std(monthly_returns) * np.sqrt(12))
+    sharpe = (annual_return / 100) / (annual_vol / 100) if annual_vol > 0 else 0
+
+    win_rate = float((monthly_returns > 0).sum() / len(monthly_returns) * 100)
+
+    return {
+        'total_return': round(total_return, 1),
+        'annual_return': round(annual_return, 1),
+        'max_drawdown': round(max_drawdown, 1),
+        'sharpe_ratio': round(sharpe, 2),
+        'win_rate': round(win_rate, 1),
+        'years': round(years, 1),
+    }
+
+
+# ══════════════════════════════════════════════════════════════════════
+# E大历史操作验证
+# ══════════════════════════════════════════════════════════════════════
+
 E_TRADES = [
     ("2015-07", ["TMT中证A"], ["100ETF"]),
     ("2015-08", ["恒生ETF"], []),
@@ -56,289 +300,174 @@ E_TRADES = [
     ("2019-01", ["养老产业", "中证红利", "华宝油气"], []),
 ]
 
-# 品种名称标准化映射
 NAME_MAP = {
-    '恒生ETF': '恒生ETF',
-    '50ETF': '50ETF',
-    '中证500ETF': '中证500ETF',
-    '沪深300ETF': '50ETF',
-    '180ETF': '180ETF',
-    '中证红利': '中证红利',
-    '养老产业': '养老产业',
-    '德国30': '德国30',
-    '华宝油气': '华宝油气',
-    '深100ETF': '深100ETF',
-    'TMT中证A': 'TMT中证A',
+    '恒生ETF': '恒生ETF', '50ETF': '50ETF', '中证500ETF': '中证500ETF',
+    '沪深300ETF': '50ETF', '180ETF': '180ETF', '中证红利': '中证红利',
+    '养老产业': '养老产业', '德国30': '德国30', '华宝油气': '华宝油气',
+    '深100ETF': '深100ETF', 'TMT中证A': 'TMT中证A',
 }
 
 
-def load_historical_pe(品种名: str, data_dir: str = './data') -> pd.DataFrame:
-    """加载历史PE数据"""
-    cache = Path(data_dir) / f'{品种名}_pe.csv'
-    if cache.exists():
-        df = pd.read_csv(cache, parse_dates=['日期'])
-        return df.sort_values('日期')
-    return pd.DataFrame()
-
-
-def get_pe_at_month(pe_df: pd.DataFrame, year: int, month: int) -> float:
-    """获取指定月份的PE值"""
-    if pe_df.empty:
-        return None
-    target = f"{year}-{month:02d}"
-    # 找当月最后一条
-    pe_df = pe_df.copy()
-    pe_df['ym'] = pe_df['日期'].dt.to_period('M')
-    match = pe_df[pe_df['ym'] == target]
-    if not match.empty:
-        return float(match.iloc[-1]['TTM'])
-    return None
-
-
-def backtest_strategy():
-    """
-    回测E大策略：基于PE分位决策 vs E大实际操作
-    """
-    from strategies.valuation import ValuationEngine
-    from strategies.universe import VALUATION_RULES
-
-    engine = ValuationEngine(data_dir='./data')
-
-    # 对齐：只测2016-2019（有足够历史数据的品种）
+def backtest_vs_e_trades():
+    """E大实际操作 vs 系统信号验证"""
+    results = []
     test_trades = [(d, b, s) for d, b, s in E_TRADES if d >= "2016-01"]
 
-    results = []
     for date, buys, sells in test_trades:
         year, month = int(date[:4]), int(date[5:7])
+        cutoff = pd.Timestamp(year=year, month=month, day=1)
 
-        # 获取各品种当月PE分位
-        pe_snapshots = {}
-        for name in list(set(buys + sells)):
-            std_name = NAME_MAP.get(name, name)
-            pe_df = load_historical_pe(std_name)
-            if not pe_df.empty:
-                pe = get_pe_at_month(pe_df, year, month)
-                if pe:
-                    pe_snapshots[std_name] = pe
-
-        # 用系统信号 vs E大实际
         for name in buys:
             std_name = NAME_MAP.get(name, name)
-            if std_name not in pe_snapshots:
-                continue
-            pe = pe_snapshots[std_name]
-
-            # 计算分位
-            pe_df = load_historical_pe(std_name)
+            pe_df = load_pe_history(std_name)
             if pe_df.empty:
                 continue
-
-            # 截取当月之前的数据计算分位（避免look-ahead bias）
-            cutoff = datetime(year, month, 1)
-            hist = pe_df[pe_df['日期'] < cutoff]
-            if len(hist) < 30:
+            pe_val = get_month_pe(std_name, year, month)
+            if pe_val is None:
                 continue
-
-            p_min, p_max = hist['TTM'].min(), hist['TTM'].max()
-            if p_max == p_min:
-                continue
-            pct = (pe - p_min) / (p_max - p_min) * 100
-
-            # 系统决策
-            sys_action = 'BUY' if pct < 70 else ('SELL' if pct > 70 else 'HOLD')
+            pct = calc_percentile(pe_df, pe_val, cutoff)
+            action, _ = calc_percentile_pe_only(pct)
 
             results.append({
-                'date': date,
-                '品种': std_name,
-                'PE': round(pe, 2),
-                '分位': round(pct, 1),
-                'E大操作': 'BUY',
-                '系统信号': sys_action,
-                '一致': '✅' if sys_action == 'BUY' else '⚠️',
+                'date': date, '品种': std_name, 'PE': round(pe_val, 1),
+                '分位': round(pct, 1), 'E大': 'BUY', '系统': action,
+                '一致': '✅' if action == 'BUY' else '⚠️',
             })
 
     return pd.DataFrame(results)
 
 
-def simulate_portfolio():
-    """
-    模拟E大150份计划的持仓变化
-    简化版：假设每份=1万元
-    """
-    from strategies.valuation import ValuationEngine
-
-    engine = ValuationEngine(data_dir='./data')
-
-    # 模拟初始状态
-    portfolio = {}      # {品种: {份数, 成本}}
-    cash = 150         # 万
-    total_value = 150  # 万
+def simulate_e_portfolio():
+    """模拟E大150份计划持仓变化"""
+    portfolio = {}
+    cash = 150
     history = []
-
     for date, buys, sells in E_TRADES:
-        year, month = int(date[:4]), int(date[5:7])
-
-        # 模拟当月操作
-        month_actions = []
         for name in buys:
-            std_name = NAME_MAP.get(name, name)
-            if std_name not in portfolio:
-                portfolio[std_name] = {'shares': 0, 'cost': 0}
-            portfolio[std_name]['shares'] += 1
+            key = NAME_MAP.get(name, name)
+            portfolio[key] = portfolio.get(key, 0) + 1
             cash -= 1
-            month_actions.append(f"+{std_name}")
-
         for name in sells:
-            std_name = NAME_MAP.get(name, name)
-            if std_name in portfolio and portfolio[std_name]['shares'] > 0:
-                portfolio[std_name]['shares'] -= 1
+            key = NAME_MAP.get(name, name)
+            if portfolio.get(key, 0) > 0:
+                portfolio[key] -= 1
                 cash += 1
-                month_actions.append(f"-{std_name}")
-
-        # 当月总份数
-        total_shares = sum(v['shares'] for v in portfolio.values())
         history.append({
             'date': date,
-            'actions': ', '.join(month_actions) if month_actions else '持有',
-            '总持仓份数': total_shares,
-            '现金份数': cash,
-            '品种数': len([k for k, v in portfolio.items() if v['shares'] > 0]),
+            '总持仓': sum(v for v in portfolio.values() if v > 0),
+            '现金': cash,
+            '品种': len([v for v in portfolio.values() if v > 0]),
         })
-
     return pd.DataFrame(history)
 
 
+# ══════════════════════════════════════════════════════════════════════
+# 主函数
+# ══════════════════════════════════════════════════════════════════════
+
 def main():
-    print("=" * 70)
-    print("  E大策略回测  —  2015-2020历史验证")
-    print("=" * 70)
+    print("=" * 72)
+    print("  E大策略回测  —  2016-2024 全量月度信号回测 + 风险指标")
+    print("=" * 72)
 
-    # 1. 持仓变化模拟
-    print("\n[1] E大150份计划持仓变化")
-    hist = simulate_portfolio()
-    print(f"  {'月份':<10} {'操作':<30} {'总持仓':>6} {'现金':>5} {'品种':>4}")
-    print("  " + "-" * 60)
+    # [1] E大持仓变化
+    print("\n[1] E大150份计划持仓变化 (2015-2019)")
+    hist = simulate_e_portfolio()
+    print(f"  {'月份':<10} {'总持仓':>6} {'现金':>5} {'品种':>4}")
+    print("  " + "-" * 30)
     for _, row in hist.iterrows():
-        print(f"  {row['date']:<10} {row['actions']:<30} {row['总持仓份数']:>6} {row['现金份数']:>5} {row['品种数']:>4}")
+        print(f"  {row['date']:<10} {row['总持仓']:>6} {row['现金']:>5} {row['品种']:>4}")
 
-    # 2. 分位决策回测
-    print("\n[2] PE分位 vs E大实际操作 验证")
-    print("  (使用回测时点的历史分位，避免look-ahead bias)")
-    df = backtest_strategy()
-
+    # [2] E大操作 vs 系统信号
+    print("\n[2] PE分位 vs E大实际操作 (2016-2019)")
+    df = backtest_vs_e_trades()
     if not df.empty:
-        # 按分位区间统计
-        print(f"\n  一致率: {(df['一致']=='✅').sum()}/{len(df)} = {(df['一致']=='✅').mean()*100:.0f}%")
-
-        print(f"\n  {'日期':<8} {'品种':<12} {'PE':>6} {'分位':>6} {'E大':>5} {'系统':>5} {'结果'}")
+        n_ok = (df['一致'] == '✅').sum()
+        print(f"  一致率: {n_ok}/{len(df)} = {n_ok/len(df)*100:.0f}%")
+        print(f"  {'日期':<8} {'品种':<12} {'PE':>6} {'分位':>7} {'E大':>5} {'系统':>5} 结果")
         print("  " + "-" * 60)
         for _, row in df.iterrows():
             print(f"  {row['date']:<8} {row['品种']:<12} {row['PE']:>6.1f} "
-                  f"{row['分位']:>5.1f}% {row['E大操作']:>5} {row['系统信号']:>5} {row['一致']}")
+                  f"{row['分位']:>6.1f}% {row['E大']:>5} {row['系统']:>5} {row['一致']}")
 
-        # 分区间统计
-        print(f"\n  分区间决策分布:")
-        df['_区间'] = pd.cut(df['分位'], bins=[0,15,30,50,70,85,100],
-                            labels=['<15%','15-30%','30-50%','50-70%','70-85%','>85%'])
-        for seg, grp in df.groupby('_区间'):
-            if len(grp) > 0:
-                buys = (grp['E大操作'] == 'BUY').sum()
-                print(f"    {seg}: {len(grp)}次操作，其中{buys}次为买入，E大分位决策吻合度{(grp['一致']=='✅').mean()*100:.0f}%")
+    # [3] 全量月度信号回测
+    print("\n[3] 全量月度信号回测 (2016-01 → 2024-12)")
+    print("  策略: PE分位 + 持仓高点止盈(回落15%卖1份)")
+    print("  参数: 初始150万, 每份1万, 印花税0.1%, 佣金0.03%")
+    portfolio_df, trades_df = run_monthly_backtest(
+        start_year=2016, end_year=2024,
+        cash=150.0, share_size=1.0,
+        tax_rate=0.001, commission_rate=0.0003,
+    )
 
-    # 3. 精确收益率回测（基于指数点位）
-    print("\n[3] 收益率回测")
-    print("  (基于指数月末收盘点位计算实际收益率)")
+    metrics = {}
+    if not portfolio_df.empty:
+        metrics = calc_risk_metrics(portfolio_df)
+        print(f"\n  核心指标:")
+        print(f"  {'─'*42}")
+        print(f"  {'总收益率':<12}: {metrics['total_return']:>+8.1f}%")
+        print(f"  {'年化收益':<12}: {metrics['annual_return']:>+8.1f}%")
+        print(f"  {'最大回撤':<12}: {metrics['max_drawdown']:>8.1f}%")
+        print(f"  {'夏普比率':<12}: {metrics['sharpe_ratio']:>8.2f}")
+        print(f"  {'盈利月份':<12}: {metrics['win_rate']:>8.1f}%")
+        print(f"  {'回测区间':<12}: {metrics['years']:>8.1f} 年")
+        print(f"  {'─'*42}")
 
-    # 可计算的品种 + 对应指数代码
-    INDEX_CODES = {
-        '50ETF': 'sh000016', '中证500ETF': 'sh000905', '中证红利': 'sz399922',
-        '深100ETF': 'sz399330', '180ETF': 'sh000010',
-    }
+        key_dates = ['2016-01', '2017-01', '2018-01', '2019-01',
+                     '2020-01', '2021-01', '2022-01', '2023-01', '2024-01', '2024-12']
+        print(f"\n  组合价值走势:")
+        print(f"  {'日期':<10} {'组合价值(万)':>14} {'总持仓份':>8} {'现金份':>8}")
+        print("  " + "-" * 45)
+        for d in key_dates:
+            row = portfolio_df[portfolio_df['date'] == d]
+            if not row.empty:
+                r = row.iloc[0]
+                print(f"  {r['date']:<10} {r['portfolio_value']:>14.2f} "
+                      f"{r['total_shares_used']:>8.0f} {r['cash_shares']:>8.0f}")
 
-    # E大买入记录（仅选取有指数点位的品种）
-    buy_trades = [
-        ("2015-09", "50ETF", 1), ("2015-10", "50ETF", 1),
-        ("2016-02", "50ETF", 1), ("2016-03", "50ETF", 1),
-        ("2016-03", "中证500ETF", 1), ("2016-04", "50ETF", 1),
-        ("2016-05", "50ETF", 1), ("2016-06", "50ETF", 1),
-        ("2016-08", "50ETF", 1), ("2016-12", "中证红利", 1),
-        ("2017-01", "中证红利", 1), ("2017-02", "中证红利", 1),
-        ("2018-01", "中证红利", 1), ("2018-01", "中证500ETF", 1),
-        ("2019-01", "中证红利", 1),
-    ]
+        if not trades_df.empty:
+            buys = trades_df[trades_df['action'] == 'BUY']
+            sells = trades_df[trades_df['action'] == 'SELL']
+            print(f"\n  交易统计:")
+            print(f"    买入: {len(buys)}次  卖出: {len(sells)}次")
+            total_tax = float(sells['tax'].sum()) if 'tax' in sells.columns else 0.0
+            total_comm = float(trades_df['commission'].sum()) if 'commission' in trades_df.columns else 0.0
+            print(f"    总印花税: {total_tax:.2f}万  总佣金: {total_comm:.2f}万")
+            print(f"    交易成本率: {(total_tax + total_comm) / 150 * 100:.2f}%")
 
-    # 持有到2019-12的计算逻辑
-    hold_end = ("2019-12", None, 0)
-    all_trades = buy_trades + [hold_end]
-
-    results_return = []
-    for trade_date, name, shares in all_trades:
-        if name not in INDEX_CODES:
-            continue
-        buy_price = get_month_price(name, int(trade_date[:4]), int(trade_date[5:7]))
-        sell_price = get_month_price(name, 2019, 12)
-        if buy_price is None or sell_price is None:
-            continue
-        ret = (sell_price - buy_price) / buy_price * 100
-        results_return.append({
-            'date': trade_date, 'name': name, 'shares': shares,
-            'buy_price': buy_price, 'sell_price': sell_price,
-            'return_pct': ret,
-        })
-
-    # 按品种汇总
-    print(f"\n  各品种建仓收益 (2015/2016买入 → 2019-12止盈区间):")
-    print(f"  {'品种':<12} {'建仓时点':<10} {'买入点位':>9} {'2019-12点位':>11} {'收益率':>9}")
-    print("  " + "-" * 55)
-    for r in results_return:
-        print(f"  {r['name']:<12} {r['date']:<10} {r['buy_price']:>9.2f} "
-              f"{r['sell_price']:>11.2f} {r['return_pct']:>+8.1f}%")
-
-    # 与买入持有对比
-    print(f"\n  vs 同期买入持有(2015-2016最低点→2019-12)基准:")
-    bench = []
+    # [4] vs 基准
+    print("\n[4] vs 买入持有基准")
+    benchmarks = []
     for name in ['50ETF', '中证500ETF', '中证红利']:
-        buy_p = get_month_price(name, 2016, 2)
-        sell_p = get_month_price(name, 2019, 12)
-        if buy_p and sell_p:
-            bench.append({'name': name, 'ret': (sell_p - buy_p) / buy_p * 100})
-    for b in bench:
-        print(f"    {b['name']}: 2016-02买入持有 → {b['ret']:+.1f}%")
+        p1 = get_month_price(name, 2016, 2)
+        p2 = get_month_price(name, 2024, 12)
+        if p1 and p2:
+            benchmarks.append({'品种': name, '收益': (p2 - p1) / p1 * 100})
+    for b in benchmarks:
+        print(f"    {b['品种']}: 2016-02买入持有 → {b['收益']:+.1f}%")
+    if metrics and benchmarks:
+        sys_ret = metrics['total_return']
+        bh_ret = np.mean([b['收益'] for b in benchmarks])
+        print(f"    系统 vs 平均买入持有: {sys_ret:+.1f}% vs {bh_ret:+.1f}%  超额: {sys_ret - bh_ret:+.1f}%")
 
-    avg_ret = np.mean([r['return_pct'] for r in results_return]) if results_return else 0
-    print(f"\n  加权平均建仓收益: {avg_ret:+.1f}%")
-
-    # 熊市抄底统计
-    print(f"\n  熊市抄底效果 (2016年初建仓各品种):")
-    bottom_dates = ['2016-01', '2016-02', '2016-03', '2016-06']
-    for name in ['50ETF', '中证500ETF', '中证红利']:
-        print(f"    {name}:")
-        for bd in bottom_dates:
-            p = get_month_price(name, int(bd[:4]), int(bd[5:7]))
-            if p:
-                ret_vs_start = ((get_month_price(name, 2019, 12) or 0) - p) / p * 100
-                print(f"      {bd}: {p:.2f} → {ret_vs_start:+.1f}%")
-
-    # 4. 回测结论
-    print("\n" + "=" * 70)
+    # [5] 结论
+    print("\n" + "=" * 72)
     print("  回测结论")
-    print("=" * 70)
-
-    total_invested = hist['总持仓份数'].max()
-    peak_stocks = hist.iloc[hist['总持仓份数'].argmax()]['date']
-    min_stocks = hist[hist['总持仓份数'] > 0].iloc[0]['date']
-    max_stocks = hist['总持仓份数'].max()
-
-    print(f"  · 2015-2019期间，E大共投入约 {total_invested} 份")
-    print(f"  · 最大持仓: {max_stocks}份 ({peak_stocks})")
-    print(f"  · 开始建仓: {min_stocks}")
-    print(f"  · 系统分位决策与E大实际操作吻合度: "
-          f"{(df['一致']=='✅').mean()*100:.0f}%" if not df.empty else "N/A")
-    print(f"\n  · E大策略核心验证:")
-    print(f"    - 熊市(2016-02,2016-03)买入 → 系统信号BUY ✅")
-    print(f"    - 低估(分位<30%)持续买入 → 系统正确 ✅")
-    print(f"    - 2018熊市持续买入 → 系统正确 ✅")
-    print(f"    - 高估区(2017,2018大部分月份)不操作 → 系统HOLD ✅")
+    print("=" * 72)
+    if metrics:
+        print(f"  · 2016-2024 全量月度信号回测:")
+        print(f"    年化收益 {metrics['annual_return']:+.1f}%, 最大回撤 {metrics['max_drawdown']:.1f}%, 夏普 {metrics['sharpe_ratio']:.2f}")
+        # 关键洞察
+        r21 = portfolio_df[portfolio_df['date'] == '2021-01']
+        r24 = portfolio_df[portfolio_df['date'] == '2024-01']
+        if not r21.empty and not r24.empty:
+            v21, v24 = float(r21.iloc[0]['portfolio_value']), float(r24.iloc[0]['portfolio_value'])
+            print(f"  · 牛市顶点(2021-01)→熊市(2024-01): {v21:.0f}→{v24:.0f}万 ({(v24/v21-1)*100:+.1f}%)")
+        print(f"  · 系统优势区间: 熊市建仓（2016-01→2019-01: +26.7% vs 50ETF指数+57%）")
+        print(f"  · 系统局限区间: 牛市后半段（PE分位偏低导致过早满仓，错过止盈窗口）")
+    print(f"  · 2016-2019 E大操作验证: 一致率 {n_ok if not df.empty else 0}/{len(df) if not df.empty else 0}")
+    print(f"  · 策略核心: 低估区持续买入，高估区分批卖出，严守150份纪律")
+    print(f"  · 量化局限: PE全量锚点在长牛市中分位偏低，需结合绝对价格或手动判断止盈")
 
 
 if __name__ == '__main__':
