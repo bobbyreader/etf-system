@@ -1,0 +1,17 @@
+# Data files (personal, don't commit)
+data/*.csv
+data/*.json
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+.eggs/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
