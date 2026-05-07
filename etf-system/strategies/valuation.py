@@ -195,6 +195,42 @@ class ValuationEngine:
             })
         return s if s else None
 
+    # ─── 均线趋势 ──────────────────────────────────────────────────
+
+    def calc_ma_trend(self, 品种名: str, ma_days: int = 250) -> Optional[dict]:
+        """计算MA均线趋势偏离度"""
+        code = ETF_PRICE_CODES.get(品种名)
+        if not code:
+            return None
+        try:
+            df = ak.fund_etf_hist_sina(symbol=code)
+            if df is None or df.empty:
+                return None
+            df = df.tail(ma_days * 2).copy()
+            if len(df) < ma_days:
+                return None
+            df['date'] = pd.to_datetime(df['date'])
+            df = df.sort_values('date')
+            ma = df['close'].rolling(ma_days).mean()
+            ma_val = float(ma.dropna().iloc[-1])
+            price = float(df.iloc[-1]['close'])
+            if ma_val == 0:
+                return None
+            deviation = (price / ma_val - 1) * 100
+            if deviation >= 20:
+                zone = '高位预警'
+            elif deviation <= -15:
+                zone = '低位机会'
+            else:
+                zone = '正常区间'
+            return {
+                'ma_value': round(ma_val, 3),
+                'deviation': round(deviation, 1),
+                'zone': zone,
+            }
+        except Exception:
+            return None
+
     # ─── 信号生成 ────────────────────────────────────────────────────
 
     def generate_signal(self, 品种名: str) -> Optional[dict]:
@@ -240,6 +276,8 @@ class ValuationEngine:
         max_drop = get_max_drop(品种名, score)
         stats = self.get_hist_stats(品种名, 10)
         price = self.fetch_etf_price(品种名)
+        # 均线趋势
+        ma_trend = self.calc_ma_trend(品种名, 250)
 
         return {
             '品种': 品种名,
@@ -257,6 +295,7 @@ class ValuationEngine:
             '最大跌幅': max_drop,
             '数据日期': date,
             '历史': stats,
+            '均线趋势': ma_trend,
         }
 
     def _commodity_signal(self, 品种名: str, info: dict) -> dict:

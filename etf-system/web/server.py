@@ -65,7 +65,8 @@ def status_json():
                 'pe_max': hist.get('pe_ttm_max'),
                 'pe_mean': hist.get('pe_ttm_mean'),
                 'note': '10年滚动窗口分位',
-            }
+            },
+            'ma_trend': row.get('均线趋势'),
         })
 
     # 汇总
