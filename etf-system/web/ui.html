@@ -1522,59 +1522,87 @@
     const today = new Date();
     $('#modalDate').textContent = today.toLocaleDateString('zh-CN', {year:'numeric',month:'2-digit',day:'2-digit'});
 
-    const sigs = modalTab === 'buy'
-      ? allSignals.filter(s => s.action === 'BUY')
-      : allSignals.filter(s => {
-          const pos = portfolioData.positions[s.name];
-          return s.action === 'SELL' || (pos && pos.shares > 0);
-        });
+    // 买入: 全量品种可选; 卖出: 仅已有持仓
+    const selectable = modalTab === 'buy'
+      ? allSignals
+      : allSignals.filter(s => portfolioData.positions[s.name] && portfolioData.positions[s.name].shares > 0);
 
-    if (sigs.length === 0) {
-      $('#tradeList').innerHTML = `<div class="empty-state">暂无${modalTab === 'buy' ? '买入' : '卖出'}信号</div>`;
+    if (selectable.length === 0) {
+      const msg = modalTab === 'buy'
+        ? '数据加载中，请稍候...'
+        : '暂无持仓可卖出';
+      $('#tradeList').innerHTML = `<div class="empty-state">${msg}</div>`;
       $('#executeBtn').disabled = true;
       return;
     }
 
-    const sig = sigs[0]; // Pre-fill first signal
-    if (!pendingTrades[sig.name]) {
-      const maxSell = modalTab === 'sell' ? (portfolioData.positions[sig.name]?.shares || 0) : 0;
-      const maxBuy = Math.min(modalCash, modalTab === 'buy' ? (sig.shares || 1) * 2 : 0);
-      pendingTrades[sig.name] = {
-        shares: modalTab === 'buy' ? (sig.shares || 1) : maxSell,
-        action: modalTab,
-        price: sig.price || 1,
+    // 默认选第一个
+    const firstName = selectable[0].name;
+    if (!pendingTrades[firstName]) {
+      const heldShares = portfolioData.positions[firstName]?.shares || 0;
+      pendingTrades[firstName] = {
+        shares: modalTab === 'buy' ? 1 : heldShares,
+        price: selectable[0].price || 1,
       };
     }
 
-    const trade = pendingTrades[sig.name];
-    const price = sig.price || 1;
-    const actionLabel = modalTab === 'buy' ? '买入' : '卖出';
-    const actionClass = modalTab;
+    // 品种下拉选项
+    const options = selectable.map(s => {
+      const held = portfolioData.positions[s.name]?.shares || 0;
+      const heldInfo = held > 0 ? ` (持有${held}份)` : '';
+      return `<option value="${s.name}" ${s.name === firstName ? 'selected' : ''}>${s.name}${heldInfo} — 分位${s.score}</option>`;
+    }).join('');
 
-    const maxSell = modalTab === 'sell' ? (portfolioData.positions[sig.name]?.shares || 0) : 999;
+    const selected = selectable.find(s => s.name === firstName);
+    const trade = pendingTrades[firstName];
+    const heldShares = portfolioData.positions[firstName]?.shares || 0;
+    const maxVal = modalTab === 'buy' ? modalCash : heldShares;
+    const minVal = 0;
+    const hasInput = trade.shares > 0;
 
     $('#tradeList').innerHTML = `
+      <div style="margin-bottom:14px">
+        <select id="tradeSelect" onchange="onTradeSelect(this.value)" style="width:100%;background:var(--bg-card);border:1px solid var(--border-bright);border-radius:8px;color:var(--text-primary);font-family:'Outfit',sans-serif;font-size:14px;padding:10px 14px;outline:none;cursor:pointer;appearance:none;-webkit-appearance:none">
+          ${options}
+        </select>
+      </div>
       <div class="trade-item">
         <div>
-          <span class="trade-name">${sig.name}</span>
-          <span class="trade-action ${actionClass}">${actionLabel}</span>
-          <div class="trade-price">现价 ${price != null ? fmt(price, 3) : '—'}</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-bottom:2px;text-transform:uppercase;letter-spacing:1px">份数</div>
+          <div class="trade-stepper">
+            <button class="stepper-btn" onclick="stepTrade('${firstName}', -1)" ${trade.shares <= minVal ? 'disabled' : ''}>−</button>
+            <input type="number" id="tradeInput" class="stepper-val" value="${trade.shares}" min="${minVal}" max="${maxVal}" oninput="onTradeInput('${firstName}', this.value)" onblur="onTradeBlur('${firstName}', this.value)" onclick="event.stopPropagation()">
+            <button class="stepper-btn" onclick="stepTrade('${firstName}', 1)" ${modalTab === 'buy' && modalCash <= 0 ? 'disabled' : ''}>+</button>
+          </div>
         </div>
-        <div class="trade-stepper">
-          <button class="stepper-btn sell-btn" onclick="stepTrade('${sig.name}', -1)" ${trade.shares <= (modalTab === 'buy' ? 0 : 1) ? 'disabled' : ''}>−</button>
-          <input type="number" class="stepper-val" id="tradeInput" value="${trade.shares}" min="${modalTab === 'buy' ? 0 : 1}" max="${modalTab === 'buy' ? modalCash : (portfolioData.positions[sig.name]?.shares || 0)}" onclick="event.stopPropagation()" oninput="onTradeInput('${sig.name}', this.value)" onblur="onTradeBlur('${sig.name}', this.value)">
-          <button class="stepper-btn buy-btn" onclick="stepTrade('${sig.name}', 1)" ${modalTab === 'buy' && modalCash <= 0 ? 'disabled' : ''}>+</button>
+        <div style="text-align:right">
+          <div style="font-size:11px;color:var(--text-muted);margin-bottom:2px;text-transform:uppercase;letter-spacing:1px">可用</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:15px;color:var(--gold)">${maxVal}</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:2px">份</div>
         </div>
       </div>
-      <div style="text-align:right;padding:8px 0 0;font-size:12px;color:var(--text-secondary)">
-        合计: <strong style="color:var(--gold);font-family:'JetBrains Mono',monospace">${trade.shares}</strong> 份
-        ${sig.intensity ? `<span style="margin-left:10px;color:var(--text-muted)">${sig.intensity}</span>` : ''}
+      <div style="margin-top:12px;padding:10px 14px;background:var(--bg-card);border-radius:8px;font-size:12px;color:var(--text-secondary)">
+        ${modalTab === 'buy' ? `建议来自信号：<strong style="color:var(--text-primary)">${selected.intensity || selected.action}</strong>，最大跌幅 ${selected.max_drop || '—'}` : `持有均价：<strong style="color:var(--text-primary)">${fmt(portfolioData.positions[firstName]?.avg_cost, 4) || '—'}</strong>，当前分位 ${selected.score}`}
       </div>
     `;
 
-    const hasTrade = trade.shares > 0;
-    $('#executeBtn').disabled = !hasTrade;
-    $('#executeBtn').textContent = hasTrade ? `确认${actionLabel}${trade.shares}份` : `确认${actionLabel}`;
+    updateExecBtn(trade.shares);
+  }
+
+  function onTradeSelect(name) {
+    // 清空其他品种的pending，切换到新选中的
+    const keys = Object.keys(pendingTrades);
+    keys.forEach(k => { if (k !== name) delete pendingTrades[k]; });
+
+    if (!pendingTrades[name]) {
+      const held = portfolioData.positions[name]?.shares || 0;
+      const sig = allSignals.find(s => s.name === name);
+      pendingTrades[name] = {
+        shares: modalTab === 'buy' ? 1 : held,
+        price: sig?.price || 1,
+      };
+    }
+    renderTradeList();
   }
 
   function stepTrade(name, delta) {
