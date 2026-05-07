@@ -741,6 +741,276 @@
 
   .toast.show { transform: translateX(-50%) translateY(0); }
 
+  /* ── Execute Modal ── */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.75);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    z-index: 200;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+
+  .modal-overlay.visible { display: flex; }
+
+  .modal {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-bright);
+    border-radius: var(--radius);
+    width: 100%;
+    max-width: 540px;
+    max-height: 85vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    animation: modalIn 0.3s cubic-bezier(0.22,1,0.36,1) forwards;
+  }
+
+  @keyframes modalIn {
+    from { opacity: 0; transform: scale(0.95) translateY(10px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
+  }
+
+  .modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .modal-title {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 20px;
+    font-weight: 500;
+  }
+
+  .modal-close {
+    width: 32px;
+    height: 32px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+  }
+
+  .modal-close:hover { color: var(--text-primary); }
+
+  .modal-tabs {
+    display: flex;
+    padding: 12px 24px 0;
+    gap: 0;
+  }
+
+  .modal-tab {
+    padding: 8px 20px;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    font-family: 'Outfit', sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+    letter-spacing: 0.3px;
+  }
+
+  .modal-tab.active { color: var(--text-primary); border-bottom-color: var(--gold); }
+  .modal-tab:hover:not(.active) { color: var(--text-primary); }
+
+  .modal-tab.buy-tab.active { border-bottom-color: var(--buy); }
+  .modal-tab.sell-tab.active { border-bottom-color: var(--sell); }
+
+  .modal-body {
+    padding: 20px 24px;
+    overflow-y: auto;
+    flex: 1;
+  }
+
+  .modal-summary {
+    display: flex;
+    justify-content: space-between;
+    background: var(--bg-card);
+    border-radius: var(--radius-sm);
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    font-size: 12px;
+  }
+
+  .modal-summary .cash { color: var(--text-secondary); }
+  .modal-summary .cash strong { color: var(--gold); font-family: 'JetBrains Mono', monospace; }
+  .modal-summary .date { color: var(--text-muted); font-family: 'JetBrains Mono', monospace; }
+
+  .trade-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .trade-item:last-child { border-bottom: none; }
+
+  .trade-name {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 15px;
+    font-weight: 500;
+    min-width: 90px;
+  }
+
+  .trade-action {
+    font-size: 10px;
+    padding: 2px 7px;
+    border-radius: 10px;
+    margin-left: 6px;
+  }
+
+  .trade-action.buy { background: var(--buy-dim); color: var(--buy); }
+  .trade-action.sell { background: var(--sell-dim); color: var(--sell); }
+
+  .trade-stepper {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .stepper-btn {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    border: 1px solid var(--border-bright);
+    background: var(--bg-card);
+    color: var(--text-secondary);
+    font-size: 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+    line-height: 1;
+  }
+
+  .stepper-btn:hover { background: var(--bg-card-hover); color: var(--text-primary); }
+  .stepper-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+  .stepper-btn.buy-btn:hover { color: var(--buy); border-color: var(--buy); }
+  .stepper-btn.sell-btn:hover { color: var(--sell); border-color: var(--sell); }
+
+  .stepper-val {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 18px;
+    font-weight: 500;
+    min-width: 28px;
+    text-align: center;
+    color: var(--text-primary);
+  }
+
+  .trade-price {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+
+  .trade-total {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--text-secondary);
+    min-width: 60px;
+    text-align: right;
+  }
+
+  .modal-footer {
+    padding: 16px 24px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+  }
+
+  .btn {
+    padding: 10px 22px;
+    border-radius: var(--radius-sm);
+    font-family: 'Outfit', sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: all 0.2s;
+    letter-spacing: 0.3px;
+  }
+
+  .btn-ghost {
+    background: transparent;
+    border-color: var(--border-bright);
+    color: var(--text-secondary);
+  }
+
+  .btn-ghost:hover { color: var(--text-primary); border-color: var(--border-bright); background: var(--bg-card); }
+
+  .btn-primary {
+    background: var(--gold);
+    color: #0c0d10;
+    border-color: var(--gold);
+  }
+
+  .btn-primary:hover { background: #d4b356; box-shadow: 0 4px 16px rgba(201,168,76,0.25); }
+  .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .btn-buy {
+    background: var(--buy);
+    color: #0c0d10;
+    border-color: var(--buy);
+  }
+
+  .btn-buy:hover { background: #3ee0b0; box-shadow: 0 4px 16px rgba(45,212,160,0.25); }
+  .btn-buy:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .btn-sell {
+    background: var(--sell);
+    color: #fff;
+    border-color: var(--sell);
+  }
+
+  .btn-sell:hover { background: #f57c7c; box-shadow: 0 4px 16px rgba(240,108,108,0.25); }
+  .btn-sell:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .result-success { color: var(--buy); font-size: 13px; margin-bottom: 8px; }
+  .result-error { color: var(--sell); font-size: 13px; margin-bottom: 8px; }
+
+  .execute-btn {
+    padding: 8px 16px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-bright);
+    border-radius: var(--radius-sm);
+    color: var(--gold);
+    font-size: 12px;
+    font-family: 'Outfit', sans-serif;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .execute-btn:hover { background: var(--gold-dim); border-color: var(--gold); }
+
+  .portfolio-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+
   /* ── Responsive ── */
   @media (max-width: 900px) {
     .app { padding: 0 16px 48px; }
@@ -831,9 +1101,44 @@
     <div class="detail-ma" id="detailMA"></div>
   </div>
 
+  <!-- Execute Modal -->
+<div class="modal-overlay" id="executeModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 class="modal-title">执行计划</h3>
+      <button class="modal-close" onclick="closeModal()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M18 6L6 18M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal-tabs">
+      <button class="modal-tab buy-tab active" data-tab="buy" onclick="switchModalTab('buy')">买入</button>
+      <button class="modal-tab sell-tab" data-tab="sell" onclick="switchModalTab('sell')">卖出</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-summary">
+        <span class="cash">可用: <strong id="modalCash">—</strong> 份</span>
+        <span class="date" id="modalDate">—</span>
+      </div>
+      <div id="tradeList"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal()">取消</button>
+      <button class="btn btn-primary" id="executeBtn" onclick="doExecute()" disabled>确认执行</button>
+    </div>
+  </div>
+</div>
+
   <!-- Portfolio -->
   <div class="section-header">
     <h2 class="section-title">持仓状态</h2>
+    <button class="execute-btn" onclick="openModal('buy')">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M12 5v14M5 12h14"/>
+      </svg>
+      录入操作
+    </button>
   </div>
 
   <div class="portfolio-section">
@@ -1133,14 +1438,12 @@
 
       allSignals = status.signals || [];
 
+      portfolioData = portfolio || { positions: {}, cash: 150, total_shares: 150, unrealized_pnl: {} };
+      modalCash = portfolioData.cash || 150;
+
       renderMarketBar(status.summary);
       renderSignals(allSignals);
-      renderPortfolio(portfolio || {
-        unrealized_pnl: {},
-        positions: {},
-        cash: 150,
-        total_shares: 150
-      });
+      renderPortfolio(portfolioData);
 
       const now = new Date();
       $('#lastUpdate').textContent = now.toLocaleTimeString('zh-CN', {
@@ -1163,6 +1466,163 @@
       currentFilter = btn.dataset.filter;
       renderSignals(allSignals);
     });
+  });
+
+  // ── Modal State ──
+  let modalTab = 'buy';
+  let modalCash = 150;
+  let pendingTrades = {}; // { name: { shares, action, price } }
+
+  function openModal(tab) {
+    modalTab = tab;
+    pendingTrades = {};
+    $$('.modal-tab').forEach(t => t.classList.remove('active'));
+    $(`.modal-tab[data-tab="${tab}"]`).classList.add('active');
+
+    // Update button style based on tab
+    const execBtn = $('#executeBtn');
+    execBtn.className = `btn btn-${tab === 'buy' ? 'buy' : 'sell'}`;
+
+    $('#executeModal').classList.add('visible');
+    renderTradeList();
+  }
+
+  function closeModal() {
+    $('#executeModal').classList.remove('visible');
+    pendingTrades = {};
+  }
+
+  function switchModalTab(tab) {
+    modalTab = tab;
+    $$('.modal-tab').forEach(t => t.classList.remove('active'));
+    $(`.modal-tab[data-tab="${tab}"]`).classList.add('active');
+
+    const execBtn = $('#executeBtn');
+    execBtn.className = `btn btn-${tab === 'buy' ? 'buy' : 'sell'}`;
+
+    renderTradeList();
+  }
+
+  function renderTradeList() {
+    $('#modalCash').textContent = modalCash;
+    const today = new Date();
+    $('#modalDate').textContent = today.toLocaleDateString('zh-CN', {year:'numeric',month:'2-digit',day:'2-digit'});
+
+    const sigs = modalTab === 'buy'
+      ? allSignals.filter(s => s.action === 'BUY')
+      : allSignals.filter(s => {
+          const pos = portfolioData.positions[s.name];
+          return s.action === 'SELL' || (pos && pos.shares > 0);
+        });
+
+    if (sigs.length === 0) {
+      $('#tradeList').innerHTML = `<div class="empty-state">暂无${modalTab === 'buy' ? '买入' : '卖出'}信号</div>`;
+      $('#executeBtn').disabled = true;
+      return;
+    }
+
+    const sig = sigs[0]; // Pre-fill first signal
+    if (!pendingTrades[sig.name]) {
+      const maxSell = modalTab === 'sell' ? (portfolioData.positions[sig.name]?.shares || 0) : 0;
+      const maxBuy = Math.min(modalCash, modalTab === 'buy' ? (sig.shares || 1) * 2 : 0);
+      pendingTrades[sig.name] = {
+        shares: modalTab === 'buy' ? (sig.shares || 1) : maxSell,
+        action: modalTab,
+        price: sig.price || 1,
+      };
+    }
+
+    const trade = pendingTrades[sig.name];
+    const price = sig.price || 1;
+    const actionLabel = modalTab === 'buy' ? '买入' : '卖出';
+    const actionClass = modalTab;
+
+    const maxSell = modalTab === 'sell' ? (portfolioData.positions[sig.name]?.shares || 0) : 999;
+
+    $('#tradeList').innerHTML = `
+      <div class="trade-item">
+        <div>
+          <span class="trade-name">${sig.name}</span>
+          <span class="trade-action ${actionClass}">${actionLabel}</span>
+          <div class="trade-price">现价 ${price != null ? fmt(price, 3) : '—'}</div>
+        </div>
+        <div class="trade-stepper">
+          <button class="stepper-btn sell-btn" onclick="stepTrade('${sig.name}', -1)" ${trade.shares <= (modalTab === 'buy' ? 0 : 1) ? 'disabled' : ''}>−</button>
+          <span class="stepper-val">${trade.shares}</span>
+          <button class="stepper-btn buy-btn" onclick="stepTrade('${sig.name}', 1)" ${modalTab === 'buy' && modalCash <= 0 ? 'disabled' : ''}>+</button>
+        </div>
+      </div>
+      <div style="text-align:right;padding:8px 0 0;font-size:12px;color:var(--text-secondary)">
+        合计: <strong style="color:var(--gold);font-family:'JetBrains Mono',monospace">${trade.shares}</strong> 份
+        ${sig.intensity ? `<span style="margin-left:10px;color:var(--text-muted)">${sig.intensity}</span>` : ''}
+      </div>
+    `;
+
+    const hasTrade = trade.shares > 0;
+    $('#executeBtn').disabled = !hasTrade;
+    $('#executeBtn').textContent = hasTrade ? `确认${actionLabel}${trade.shares}份` : `确认${actionLabel}`;
+  }
+
+  function stepTrade(name, delta) {
+    const trade = pendingTrades[name];
+    if (!trade) return;
+
+    const minVal = modalTab === 'buy' ? 0 : 1;
+    const maxVal = modalTab === 'buy' ? modalCash : (portfolioData.positions[name]?.shares || 0);
+
+    const newVal = trade.shares + delta;
+    if (newVal < minVal || newVal > maxVal) return;
+
+    trade.shares = newVal;
+    renderTradeList();
+  }
+
+  async function doExecute() {
+    const trade = Object.entries(pendingTrades).find(([, t]) => t.shares > 0);
+    if (!trade) return;
+
+    const [, t] = trade;
+    const execBtn = $('#executeBtn');
+    execBtn.disabled = true;
+    execBtn.textContent = '执行中...';
+
+    try {
+      const payload = modalTab === 'buy'
+        ? { buys: [{ name: trade[0], shares: t.shares }] }
+        : { sells: [{ name: trade[0], shares: t.shares }] };
+
+      const res = await fetch('/execute.json', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const result = await res.json();
+
+      if (result.errors && result.errors.length > 0) {
+        showToast('执行失败: ' + result.errors[0]);
+      } else {
+        showToast(`${modalTab === 'buy' ? '买入' : '卖出'}成功！`);
+        closeModal();
+        fetchAll(); // Refresh all data
+      }
+    } catch (e) {
+      console.error(e);
+      showToast('网络错误，请重试');
+    } finally {
+      execBtn.disabled = false;
+      execBtn.textContent = `确认${modalTab === 'buy' ? '买入' : '卖出'}${t.shares}份`;
+    }
+  }
+
+  // Close modal on overlay click
+  $('#executeModal').addEventListener('click', (e) => {
+    if (e.target === $('#executeModal')) closeModal();
+  });
+
+  // Close modal on Escape
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeModal();
   });
 
   $('#refreshBtn').addEventListener('click', fetchAll);

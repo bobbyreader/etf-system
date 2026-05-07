@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import json
 from datetime import datetime
-from flask import Flask, render_template, jsonify, send_from_directory
+from flask import Flask, render_template, jsonify, request
 
 from strategies.valuation import ValuationEngine
 from portfolio.manager import PortfolioManager
@@ -117,6 +117,29 @@ def portfolio_json():
             'positions': pnl.get('positions', []),
         }
     })
+
+
+@app.route('/execute.json', methods=['POST'])
+def execute_json():
+    """执行买卖操作"""
+    data = request.get_json() or {}
+    buys = data.get('buys', [])
+    sells = data.get('sells', [])
+    date = data.get('date')
+
+    pm = PortfolioManager(data_dir=str(DATA_DIR))
+    engine = ValuationEngine(data_dir=str(DATA_DIR))
+
+    # 获取实时价格
+    prices = {}
+    all_names = set(x['name'] for x in buys) | set(x['name'] for x in sells)
+    for name in all_names:
+        sig = engine.generate_signal(name)
+        if sig and sig.get('ETF价格'):
+            prices[name] = sig['ETF价格']
+
+    result = pm.execute_plan(buys, sells, prices=prices, date=date)
+    return jsonify(result)
 
 
 def main():
