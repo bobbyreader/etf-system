@@ -13,6 +13,7 @@ from datetime import datetime
 from flask import Flask, render_template, jsonify, request
 
 from strategies.valuation import ValuationEngine
+from strategies.grid_engine import GridEngine, GridConfig
 from portfolio.manager import PortfolioManager
 
 
@@ -144,18 +145,117 @@ def portfolio_json():
     summary = pm.get_summary()
     pnl = pm.calc_unrealized_pnl(current_prices) if current_prices else {'positions': [], '总浮盈亏(万)': 0}
 
+    # 资产配置告警
+    from strategies.universe import UNIVERSE, ASSET_CLASS_LIMITS
+    total = pm.data.get('total_shares', 150)
+    warnings = []
+
+    # 品种级别超配
+    for name, pos in pm.data.get('positions', {}).items():
+        shares = pos.get('shares', 0)
+        pct = shares / total * 100
+        info = UNIVERSE.get(name, {})
+        max_alloc = info.get('max_allocation', 0.20)
+        max_shares = int(max_alloc * total)
+        if shares > max_shares:
+            warnings.append({
+                'type': '品种超配',
+                'level': 'warning',
+                'name': name,
+                'current': f'{shares}份({pct:.1f}%)',
+                'limit': f'{max_shares}份({max_alloc*100:.0f}%)',
+                'msg': f'{name}持仓{shares}份，占{pct:.1f}%，超过单品上限{max_alloc*100:.0f}%',
+            })
+
+    # 大类级别超配
+    asset_classes = {}
+    for name, pos in pm.data.get('positions', {}).items():
+        info = UNIVERSE.get(name, {})
+        cls = info.get('type', 'other')
+        asset_classes[cls] = asset_classes.get(cls, 0) + pos.get('shares', 0)
+
+    for cls, shares in asset_classes.items():
+        pct = shares / total * 100
+        limits_map = {
+            'broad': ('broad', '宽基'),
+            'hk': ('hk', '港股'),
+            'overseas': ('us_eu', '海外'),
+            'commodity': ('commodity', '商品'),
+            'sector': ('sector', '行业'),
+        }
+        if cls in limits_map:
+            key, label = limits_map[cls]
+            limit = ASSET_CLASS_LIMITS.get(key, 0.20)
+            max_shares = int(limit * total)
+            if shares > max_shares:
+                warnings.append({
+                    'type': '大类超配',
+                    'level': 'warning',
+                    'name': label,
+                    'current': f'{shares}份({pct:.1f}%)',
+                    'limit': f'{max_shares}份({limit*100:.0f}%)',
+                    'msg': f'{label}仓位{shares}份，占{pct:.1f}%，超过大类上限{limit*100:.0f}%',
+                })
+
     return jsonify({
         'generated': datetime.now().isoformat(),
         'updated': pm.data.get('updated', ''),
-        'total_shares': pm.data.get('total_shares', 150),
+        'total_shares': total,
         'cash': summary['cash'],
         'positions': pm.data.get('positions', {}),
         'history': pm.data.get('history', [])[-20:],
+        'warnings': warnings,
         'unrealized_pnl': {
             'total': pnl.get('总浮盈亏(万)', 0),
             'pct': pnl.get('总浮盈亏率', 0),
             'positions': pnl.get('positions', []),
         }
+    })
+
+
+@app.route('/grid.json')
+def grid_json():
+    """网格策略状态"""
+    GRID_NAMES = ['华宝油气']  # 网格品种列表
+
+    engine = ValuationEngine(data_dir=str(DATA_DIR))
+    grids = []
+
+    for name in GRID_NAMES:
+        price = engine.fetch_etf_price(name)
+        if price is None:
+            continue
+
+        # 华宝油气默认配置
+        cfg = GridConfig(
+            name=name, base_price=price,
+            grid_pct=5.0, n_grids=8,
+            max_drop_pct=50.0,
+            keep_profit=True, keep_ratio=0.05,
+            progressive=True, progressive_pct=5.0,
+            multi_grid=True,
+        )
+        eng = GridEngine(name, cfg)
+
+        # 获取实时状态
+        status = eng.get_grid_status(price)
+        pt = eng.pressure_test()
+        sim = eng.sim_trigger(price)
+        rec = eng.get_recommendation(price)
+
+        grids.append({
+            'name': name,
+            'current_price': price,
+            'status': status,
+            'pressure_test': pt,
+            'pending_buys': sim['buys'],
+            'pending_sells': sim['sells'],
+            'recommendation': rec,
+        })
+
+    return jsonify({
+        'generated': datetime.now().isoformat(),
+        'grids': grids,
     })
 
 
