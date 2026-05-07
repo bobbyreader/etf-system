@@ -1742,10 +1742,12 @@
   let modalTab = 'buy';
   let modalCash = 150;
   let pendingTrades = {}; // { name: { shares, action, price } }
+  let currentTradeName = ''; // 当前选中的交易品种
 
   function openModal(tab) {
     modalTab = tab;
     pendingTrades = {};
+    currentTradeName = '';
     $$('.modal-tab').forEach(t => t.classList.remove('active'));
     $(`.modal-tab[data-tab="${tab}"]`).classList.add('active');
 
@@ -1793,12 +1795,14 @@
     }
 
     // 默认选第一个
-    const firstName = selectable[0].name;
-    if (!pendingTrades[firstName]) {
-      const heldShares = portfolioData.positions[firstName]?.shares || 0;
-      pendingTrades[firstName] = {
+    if (!currentTradeName || !selectable.find(s => s.name === currentTradeName)) {
+      currentTradeName = selectable[0].name;
+    }
+    if (!pendingTrades[currentTradeName]) {
+      const heldShares = portfolioData.positions[currentTradeName]?.shares || 0;
+      pendingTrades[currentTradeName] = {
         shares: modalTab === 'buy' ? 1 : heldShares,
-        price: selectable[0].price || 1,
+        price: selectable.find(s => s.name === currentTradeName)?.price || 1,
       };
     }
 
@@ -1806,12 +1810,12 @@
     const options = selectable.map(s => {
       const held = portfolioData.positions[s.name]?.shares || 0;
       const heldInfo = held > 0 ? ` (持有${held}份)` : '';
-      return `<option value="${s.name}" ${s.name === firstName ? 'selected' : ''}>${s.name}${heldInfo} — 分位${s.score}</option>`;
+      return `<option value="${s.name}" ${s.name === currentTradeName ? 'selected' : ''}>${s.name}${heldInfo} — 分位${s.score}</option>`;
     }).join('');
 
-    const selected = selectable.find(s => s.name === firstName);
-    const trade = pendingTrades[firstName];
-    const heldShares = portfolioData.positions[firstName]?.shares || 0;
+    const selected = selectable.find(s => s.name === currentTradeName);
+    const trade = pendingTrades[currentTradeName];
+    const heldShares = portfolioData.positions[currentTradeName]?.shares || 0;
     const maxVal = modalTab === 'buy' ? modalCash : heldShares;
     const minVal = 0;
     const hasInput = trade.shares > 0;
@@ -1826,9 +1830,9 @@
         <div>
           <div style="font-size:11px;color:var(--text-muted);margin-bottom:2px;text-transform:uppercase;letter-spacing:1px">份数</div>
           <div class="trade-stepper">
-            <button class="stepper-btn" onclick="stepTrade('${firstName}', -1)" ${trade.shares <= minVal ? 'disabled' : ''}>−</button>
-            <input type="number" id="tradeInput" class="stepper-val" value="${trade.shares}" min="${minVal}" max="${maxVal}" oninput="onTradeInput('${firstName}', this.value)" onblur="onTradeBlur('${firstName}', this.value)" onclick="event.stopPropagation()">
-            <button class="stepper-btn" onclick="stepTrade('${firstName}', 1)" ${modalTab === 'buy' && modalCash <= 0 ? 'disabled' : ''}>+</button>
+            <button class="stepper-btn" onclick="stepTrade('${currentTradeName}', -1)" ${trade.shares <= minVal ? 'disabled' : ''}>−</button>
+            <input type="number" id="tradeInput" class="stepper-val" value="${trade.shares}" min="${minVal}" max="${maxVal}" oninput="onTradeInput('${currentTradeName}', this.value)" onblur="onTradeBlur('${currentTradeName}', this.value)" onclick="event.stopPropagation()">
+            <button class="stepper-btn" onclick="stepTrade('${currentTradeName}', 1)" ${modalTab === 'buy' && modalCash <= 0 ? 'disabled' : ''}>+</button>
           </div>
         </div>
         <div style="text-align:right">
@@ -1838,7 +1842,7 @@
         </div>
       </div>
       <div style="margin-top:12px;padding:10px 14px;background:var(--bg-card);border-radius:8px;font-size:12px;color:var(--text-secondary)">
-        ${modalTab === 'buy' ? `建议来自信号：<strong style="color:var(--text-primary)">${selected.intensity || selected.action}</strong>，最大跌幅 ${selected.max_drop || '—'}` : `持有均价：<strong style="color:var(--text-primary)">${fmt(portfolioData.positions[firstName]?.avg_cost, 4) || '—'}</strong>，当前分位 ${selected.score}`}
+        ${modalTab === 'buy' ? `建议来自信号：<strong style="color:var(--text-primary)">${selected?.intensity || selected?.action || '—'}</strong>，最大跌幅 ${selected?.max_drop || '—'}` : `持有均价：<strong style="color:var(--text-primary)">${fmt(portfolioData.positions[currentTradeName]?.avg_cost, 4) || '—'}</strong>，当前分位 ${selected?.score || '—'}`}
       </div>
     `;
 
