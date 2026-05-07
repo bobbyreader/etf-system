@@ -130,13 +130,16 @@ def execute_json():
     pm = PortfolioManager(data_dir=str(DATA_DIR))
     engine = ValuationEngine(data_dir=str(DATA_DIR))
 
+    # 把 name 转成品种（与 manager.py 接口对齐）
+    buys = [{'品种': x['name'], '份数': x['shares']} for x in data.get('buys', []) if x.get('name')]
+    sells = [{'品种': x['name'], '份数': x['shares']} for x in data.get('sells', []) if x.get('name')]
+
     # 获取实时价格
     prices = {}
-    all_names = set(x['name'] for x in buys) | set(x['name'] for x in sells)
-    for name in all_names:
-        sig = engine.generate_signal(name)
+    for item in buys + sells:
+        sig = engine.generate_signal(item['品种'])
         if sig and sig.get('ETF价格'):
-            prices[name] = sig['ETF价格']
+            prices[item['品种']] = sig['ETF价格']
 
     result = pm.execute_plan(buys, sells, prices=prices, date=date)
     return jsonify(result)
