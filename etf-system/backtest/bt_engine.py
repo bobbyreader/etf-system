@@ -1,3 +1,1 @@
-import base64
-with open('backtest/bt_engine.py', 'rb') as f:
-    print(base64.b64encode(f.read()).decode())
+IiIiCkXlpKci6ZW/6LWiIuS9k+ezuyAtIOWbnua1i+W8leaTjiB2NArkv67lpI3vvJrikaDmu5rliqjn
