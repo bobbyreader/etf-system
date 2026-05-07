@@ -909,10 +909,24 @@
     font-family: 'JetBrains Mono', monospace;
     font-size: 18px;
     font-weight: 500;
-    min-width: 28px;
+    min-width: 40px;
     text-align: center;
     color: var(--text-primary);
+    background: var(--bg-card);
+    border: 1px solid var(--border-bright);
+    border-radius: 6px;
+    padding: 4px 8px;
+    outline: none;
+    transition: border-color 0.2s;
   }
+
+  .stepper-val:focus {
+    border-color: var(--gold);
+    box-shadow: 0 0 0 2px var(--gold-glow);
+  }
+
+  .stepper-val::-webkit-inner-spin-button,
+  .stepper-val::-webkit-outer-spin-button { opacity: 1; }
 
   .trade-price {
     font-family: 'JetBrains Mono', monospace;
@@ -1548,7 +1562,7 @@
         </div>
         <div class="trade-stepper">
           <button class="stepper-btn sell-btn" onclick="stepTrade('${sig.name}', -1)" ${trade.shares <= (modalTab === 'buy' ? 0 : 1) ? 'disabled' : ''}>−</button>
-          <span class="stepper-val">${trade.shares}</span>
+          <input type="number" class="stepper-val" id="tradeInput" value="${trade.shares}" min="${modalTab === 'buy' ? 0 : 1}" max="${modalTab === 'buy' ? modalCash : (portfolioData.positions[sig.name]?.shares || 0)}" onclick="event.stopPropagation()" oninput="onTradeInput('${sig.name}', this.value)" onblur="onTradeBlur('${sig.name}', this.value)">
           <button class="stepper-btn buy-btn" onclick="stepTrade('${sig.name}', 1)" ${modalTab === 'buy' && modalCash <= 0 ? 'disabled' : ''}>+</button>
         </div>
       </div>
@@ -1575,6 +1589,32 @@
 
     trade.shares = newVal;
     renderTradeList();
+  }
+
+  function onTradeInput(name, val) {
+    const trade = pendingTrades[name];
+    if (!trade) return;
+    const v = parseInt(val) || 0;
+    trade.shares = v;
+    updateExecBtn(v);
+  }
+
+  function onTradeBlur(name, val) {
+    const trade = pendingTrades[name];
+    if (!trade) return;
+    const minVal = modalTab === 'buy' ? 0 : 1;
+    const maxVal = modalTab === 'buy' ? modalCash : (portfolioData.positions[name]?.shares || 0);
+    const v = Math.min(maxVal, Math.max(minVal, parseInt(val) || 0));
+    trade.shares = v;
+    renderTradeList();
+  }
+
+  function updateExecBtn(shares) {
+    const btn = $('#executeBtn');
+    if (!btn) return;
+    const actionLabel = modalTab === 'buy' ? '买入' : '卖出';
+    btn.disabled = shares <= 0;
+    btn.textContent = shares > 0 ? `确认${actionLabel}${shares}份` : `确认${actionLabel}`;
   }
 
   async function doExecute() {
