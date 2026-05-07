@@ -243,6 +243,59 @@ class ValuationEngine:
             'note': '估算值仅供参考，实际跌幅可能更大或更小',
         }
 
+    # ─── 目标市值止盈策略 ───────────────────────────────────────────
+
+    def calc_target_market_value(self, name: str, avg_cost: float,
+                                  current_price: float, shares: int) -> dict:
+        """
+        E大目标市值止盈策略
+        核心逻辑：持仓盈利达到目标市值时分批卖出
+        - 盈利50% → 卖1份
+        - 盈利80% → 卖1份
+        - 盈利100% → 卖2份
+        - 盈利150% → 卖3份
+        留一半利润，永不全部卖出
+        """
+        if avg_cost <= 0 or shares <= 0:
+            return {'action': 'hold', 'profit_pct': 0, 'sell_shares': 0, 'advice': ''}
+
+        profit_ratio = current_price / avg_cost
+        profit_pct = (profit_ratio - 1) * 100
+
+        sell_rules = [
+            (150, 3, '盈利150%，大量止盈，保留部分仓位'),
+            (100, 2, '盈利100%，目标市值达成，卖2份落袋'),
+            (80,  1, '盈利80%，分批止盈，卖1份'),
+            (50,  1, '盈利50%，开始止盈，卖1份'),
+        ]
+
+        sell_shares = 0
+        advice = ''
+        for threshold, shares_to_sell, reason in sell_rules:
+            if profit_pct >= threshold:
+                sell_shares = min(shares_to_sell, shares)
+                advice = reason
+                break
+
+        # 永远留一半：已持仓超过N份时不全部卖出
+        max_sell = max(1, shares // 2)
+        sell_shares = min(sell_shares, max_sell)
+
+        if sell_shares > 0:
+            action = 'take_profit'
+        else:
+            action = 'hold'
+
+        return {
+            'action': action,
+            'profit_ratio': round(profit_ratio, 3),
+            'profit_pct': round(profit_pct, 1),
+            'sell_shares': sell_shares,
+            'target_price': round(avg_cost * 2.0, 4),
+            'advice': advice or f'持仓盈利{profit_pct:.0f}%，继续持有等待',
+            'e_note': '目标市值策略的核心是让利润奔跑，永远留一半仓位不卖',
+        }
+
     # ─── 分位计算 ────────────────────────────────────────────────────
 
     def calc_percentile(self, pe_df: pd.DataFrame, current_pe: float,

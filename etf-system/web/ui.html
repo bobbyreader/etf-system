@@ -657,6 +657,52 @@
   .pnl-big.negative { color: var(--sell); }
   .pnl-big.zero { color: var(--text-secondary); }
 
+  /* ── Allocation ── */
+  .alloc-bar-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  .alloc-bar-label {
+    font-size: 12px;
+    color: var(--text-secondary);
+    min-width: 60px;
+    text-align: right;
+  }
+  .alloc-bar-track {
+    flex: 1;
+    height: 8px;
+    background: rgba(255,255,255,0.04);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .alloc-bar-fill {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.4s ease;
+  }
+  .alloc-bar-val {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text-secondary);
+    min-width: 38px;
+  }
+  .alloc-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 4px 0;
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+  .alloc-legend-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
   .position-row {
     display: flex;
     align-items: center;
@@ -1197,6 +1243,11 @@
         <div class="empty-state">空空如也，尚未建仓</div>
       </div>
     </div>
+    <div class="portfolio-card allocation-card">
+      <div class="stat-label">大类配置</div>
+      <div id="allocBars"></div>
+      <div id="allocLegend"></div>
+    </div>
   </div>
 
   <!-- Grid Status -->
@@ -1477,6 +1528,47 @@
     $('#positionsList').innerHTML = html;
   }
 
+  function renderAllocation(data) {
+    const alloc = data.asset_allocation || {};
+    const classes = alloc.classes || [];
+    const posList = alloc.positions || [];
+    const cashPct = alloc.cash_pct || 0;
+
+    // 水平条形图
+    let barsHtml = '';
+    for (const c of classes) {
+      if (c.shares <= 0) continue;
+      barsHtml += `
+        <div class="alloc-bar-wrap">
+          <span class="alloc-bar-label">${c.label}</span>
+          <div class="alloc-bar-track">
+            <div class="alloc-bar-fill" style="width:${c.pct}%;background:${c.color}"></div>
+          </div>
+          <span class="alloc-bar-val">${c.pct}%</span>
+        </div>`;
+    }
+    // 现金
+    if (alloc.cash > 0) {
+      barsHtml += `
+        <div class="alloc-bar-wrap">
+          <span class="alloc-bar-label">现金</span>
+          <div class="alloc-bar-track">
+            <div class="alloc-bar-fill" style="width:${cashPct}%;background:#3d3d3d"></div>
+          </div>
+          <span class="alloc-bar-val">${cashPct}%</span>
+        </div>`;
+    }
+    $('#allocBars').innerHTML = barsHtml || '<div class="empty-state">暂无配置数据</div>';
+
+    // 图例
+    let legendHtml = '';
+    for (const c of classes) {
+      legendHtml += `<div class="alloc-legend-item"><span class="alloc-legend-dot" style="background:${c.color}"></span>${c.label} ${c.shares}份</div>`;
+    }
+    if (alloc.cash > 0) legendHtml += `<div class="alloc-legend-item"><span class="alloc-legend-dot" style="background:#3d3d3d"></span>现金 ${alloc.cash}份</div>`;
+    $('#allocLegend').innerHTML = legendHtml;
+  }
+
   // ── Render Grid ──
   function renderGrid() {
     // 华宝油气网格参数
@@ -1515,6 +1607,7 @@
       renderMarketBar(status.summary);
       renderSignals(allSignals);
       renderPortfolio(portfolioData);
+      renderAllocation(portfolioData);
 
       const now = new Date();
       $('#lastUpdate').textContent = now.toLocaleTimeString('zh-CN', {

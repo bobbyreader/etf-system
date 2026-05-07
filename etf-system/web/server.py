@@ -129,6 +129,68 @@ def _build_market_outlook(signals, zone_counts):
         return '📊 市场整体估值处于正常区间，均衡配置，耐心等待。'
 
 
+def _build_asset_allocation(pm, total):
+    """构建大类资产配置分布"""
+    from strategies.universe import UNIVERSE, ASSET_CLASS_LIMITS
+    TYPE_LABELS = {
+        'broad': '宽基A股', 'hk': '港股', 'overseas': '海外成熟',
+        'commodity': '商品', 'sector': '行业', 'other': '其他',
+    }
+    TYPE_COLORS = {
+        'broad': '#5b9cf6', 'hk': '#f59e0b', 'overseas': '#8b5cf6',
+        'commodity': '#c9a84c', 'sector': '#2dd4a0', 'other': '#6b7280',
+    }
+    pos_dict = pm.data.get('positions', {})
+    items = []
+    for name, pos in pos_dict.items():
+        info = UNIVERSE.get(name, {})
+        cls = info.get('type', 'other')
+        shares = pos.get('shares', 0)
+        pct = shares / total * 100 if total > 0 else 0
+        items.append({
+            'name': name, 'type': cls, 'label': TYPE_LABELS.get(cls, '其他'),
+            'shares': shares, 'pct': round(pct, 1), 'avg_cost': pos.get('avg_cost', 0),
+        })
+    class_map = {}
+    for it in items:
+        cls = it['type']
+        if cls not in class_map:
+            class_map[cls] = {'label': TYPE_LABELS.get(cls, '其他'), 'color': TYPE_COLORS.get(cls, '#6b7280'), 'shares': 0, 'pct': 0}
+        class_map[cls]['shares'] += it['shares']
+        class_map[cls]['pct'] += it['pct']
+    for cls in class_map:
+        class_map[cls]['pct'] = round(class_map[cls]['pct'], 1)
+    cash_pct = pm.data.get('cash', 0) / total * 100 if total > 0 else 0
+    return {
+        'total': total, 'cash': pm.data.get('cash', 0),
+        'cash_pct': round(cash_pct, 1), 'invested_pct': round(100 - cash_pct, 1),
+        'positions': items, 'classes': list(class_map.values()),
+    }
+
+
+def _build_target_market(pm, engine, current_prices):
+    """构建目标市值止盈建议"""
+    results = []
+    for name, pos in pm.data.get('positions', {}).items():
+        avg_cost = pos.get('avg_cost', 0)
+        shares = pos.get('shares', 0)
+        cur_price = current_prices.get(name, avg_cost)
+        if avg_cost <= 0 or shares <= 0:
+            continue
+        r = engine.calc_target_market_value(name, avg_cost, cur_price, shares)
+        results.append({
+            'name': name,
+            'profit_pct': r['profit_pct'],
+            'profit_ratio': r['profit_ratio'],
+            'sell_shares': r['sell_shares'],
+            'target_price': r.get('target_price', 0),
+            'action': r['action'],
+            'advice': r['advice'],
+            'e_note': r['e_note'],
+        })
+    return results
+
+
 @app.route('/portfolio.json')
 def portfolio_json():
     """生成持仓数据 JSON"""
@@ -205,10 +267,12 @@ def portfolio_json():
         'positions': pm.data.get('positions', {}),
         'history': pm.data.get('history', [])[-20:],
         'warnings': warnings,
+        'asset_allocation': _build_asset_allocation(pm, total),
         'unrealized_pnl': {
             'total': pnl.get('总浮盈亏(万)', 0),
             'pct': pnl.get('总浮盈亏率', 0),
             'positions': pnl.get('positions', []),
+            'target_market': _build_target_market(pm, engine, current_prices),
         }
     })
 
