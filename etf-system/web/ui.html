@@ -3,416 +3,1174 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>E大长赢系统 - 实时信号</title>
+<title>E大长赢 · 150份计划</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;500;600&family=Outfit:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #0f1419;
-    --card: #1a2332;
-    --border: #2a3a50;
-    --text: #e6edf3;
-    --text-dim: #8b949e;
-    --green: #3fb950;
-    --red: #f85149;
-    --yellow: #d29922;
-    --blue: #58a6ff;
-    --purple: #bc8cff;
-    --pink: #ff7b72;
+    --bg-base: #0c0d10;
+    --bg-surface: #13141a;
+    --bg-card: #191b22;
+    --bg-card-hover: #1f2128;
+    --bg-input: #1c1e25;
+    --border: rgba(255,255,255,0.055);
+    --border-bright: rgba(255,255,255,0.11);
+    --text-primary: #e8e2d6;
+    --text-secondary: #8a8278;
+    --text-muted: #4a4844;
+    --gold: #c9a84c;
+    --gold-dim: rgba(201,168,76,0.13);
+    --gold-glow: rgba(201,168,76,0.07);
+    --buy: #2dd4a0;
+    --buy-dim: rgba(45,212,160,0.11);
+    --sell: #f06c6c;
+    --sell-dim: rgba(240,108,108,0.11);
+    --hold: #c9a84c;
+    --hold-dim: rgba(201,168,76,0.09);
+    --blue: #5b9cf6;
+    --blue-dim: rgba(91,156,246,0.11);
+    --radius: 14px;
+    --radius-sm: 8px;
   }
+
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; min-height: 100vh; padding: 24px; }
-  .container { max-width: 900px; margin: 0 auto; }
 
-  /* Header */
-  .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 28px; }
-  .header h1 { font-size: 22px; font-weight: 600; letter-spacing: -0.5px; }
-  .header .meta { color: var(--text-dim); font-size: 13px; }
-  .refresh-btn { background: var(--blue); color: #fff; border: none; padding: 8px 18px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 500; }
-  .refresh-btn:hover { opacity: 0.85; }
+  body {
+    background: var(--bg-base);
+    color: var(--text-primary);
+    font-family: 'Outfit', -apple-system, sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+    min-height: 100vh;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
 
-  /* Summary bar */
-  .summary-bar { display: flex; gap: 12px; margin-bottom: 24px; flex-wrap: wrap; }
-  .stat-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px 20px; flex: 1; min-width: 140px; }
-  .stat-card .label { font-size: 12px; color: var(--text-dim); margin-bottom: 6px; }
-  .stat-card .value { font-size: 22px; font-weight: 700; }
-  .stat-card .value.green { color: var(--green); }
-  .stat-card .value.red { color: var(--red); }
-  .stat-card .value.yellow { color: var(--yellow); }
-  .stat-card .value.blue { color: var(--blue); }
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--text-muted); border-radius: 2px; }
 
-  /* Section */
-  .section { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 20px; }
-  .section-title { font-size: 14px; font-weight: 600; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+  /* ── Layout ── */
+  .app {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 28px 64px;
+  }
 
-  /* Signal table */
-  .signal-table { width: 100%; border-collapse: collapse; }
-  .signal-table th { text-align: left; font-size: 12px; font-weight: 500; color: var(--text-dim); padding: 8px 12px; border-bottom: 1px solid var(--border); }
-  .signal-table td { padding: 12px; border-bottom: 1px solid rgba(42,58,80,0.5); font-size: 14px; vertical-align: middle; }
-  .signal-table tr:last-child td { border-bottom: none; }
-  .signal-table tr:hover { background: rgba(42,58,80,0.3); }
-  .signal-table .name { font-weight: 600; }
-  .signal-table .pe { color: var(--text-dim); font-size: 13px; }
+  /* ── Header ── */
+  .header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: rgba(12,13,16,0.88);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 32px;
+  }
 
-  /* Percentile bar */
-  .pct-bar-wrap { display: flex; align-items: center; gap: 10px; }
-  .pct-bar { flex: 1; height: 8px; background: rgba(255,255,255,0.08); border-radius: 4px; overflow: hidden; }
-  .pct-bar-fill { height: 100%; border-radius: 4px; transition: width 0.6s ease; }
-  .pct-val { font-size: 13px; font-weight: 600; min-width: 46px; text-align: right; }
-  .pct-zone { font-size: 11px; padding: 2px 8px; border-radius: 4px; font-weight: 500; white-space: nowrap; }
+  .header-inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-top: 20px;
+  }
 
-  .action-badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 13px; font-weight: 600; }
-  .action-buy { background: rgba(63,185,80,0.15); color: var(--green); }
-  .action-sell { background: rgba(248,81,73,0.15); color: var(--red); }
-  .action-hold { background: rgba(210,153,34,0.15); color: var(--yellow); }
-  .action-manual { background: rgba(88,166,255,0.15); color: var(--blue); }
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
 
-  .pe-range { font-size: 12px; color: var(--text-dim); }
+  .logo-mark {
+    width: 38px;
+    height: 38px;
+    background: linear-gradient(135deg, var(--gold) 0%, #8b6914 100%);
+    border-radius: 11px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 20px;
+    font-weight: 600;
+    color: #0c0d10;
+    letter-spacing: -0.5px;
+    box-shadow: 0 4px 16px rgba(201,168,76,0.25);
+  }
 
-  /* Psychology copy */
-  .psychology { font-size: 14px; line-height: 1.8; color: var(--text); }
-  .psychology .highlight { color: var(--blue); font-weight: 500; }
-  .psychology .warn { color: var(--yellow); font-weight: 500; }
-  .psychology .danger { color: var(--red); font-weight: 500; }
+  .logo-text h1 {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 21px;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+    color: var(--text-primary);
+    line-height: 1.2;
+  }
 
-  /* Portfolio */
-  .portfolio-row { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid rgba(42,58,80,0.5); }
-  .portfolio-row:last-child { border-bottom: none; }
-  .portfolio-row .left { display: flex; align-items: center; gap: 12px; }
-  .portfolio-row .name { font-weight: 600; min-width: 80px; }
-  .portfolio-row .shares { color: var(--text-dim); font-size: 13px; }
-  .portfolio-row .pnl { font-weight: 600; font-size: 14px; }
-  .portfolio-row .pnl.pos { color: var(--green); }
-  .portfolio-row .pnl.neg { color: var(--red); }
+  .logo-text span {
+    font-size: 10px;
+    color: var(--text-muted);
+    letter-spacing: 2.5px;
+    text-transform: uppercase;
+    font-weight: 400;
+  }
 
-  /* Grid */
-  .grid-levels { display: flex; flex-wrap: wrap; gap: 8px; }
-  .grid-level { display: flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 6px; font-size: 13px; background: rgba(255,255,255,0.05); }
-  .grid-level.filled { background: rgba(63,185,80,0.15); }
-  .grid-level .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); }
-  .grid-level.filled .dot { background: var(--green); }
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+  }
 
-  /* Empty state */
-  .empty-state { text-align: center; padding: 40px; color: var(--text-dim); font-size: 14px; }
+  .live-badge {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 10px;
+    color: var(--text-secondary);
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+  }
 
-  /* Loading */
-  .loading { text-align: center; padding: 40px; color: var(--text-dim); font-size: 14px; }
-  .loading::after { content: '...'; animation: dots 1.5s infinite; }
-  @keyframes dots { 0%,20%{content:'.'} 40%{content:'..'} 60%,100%{content:'...'} }
+  .live-dot {
+    width: 6px;
+    height: 6px;
+    background: var(--buy);
+    border-radius: 50%;
+    animation: pulse 2.4s ease-in-out infinite;
+  }
 
-  .note { font-size: 12px; color: var(--text-dim); margin-top: 12px; }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); box-shadow: 0 0 0 0 rgba(45,212,160,0.4); }
+    50% { opacity: 0.6; transform: scale(0.88); box-shadow: 0 0 0 4px rgba(45,212,160,0); }
+  }
 
-  @media (max-width: 600px) {
-    body { padding: 16px; }
-    .stat-card { min-width: 120px; padding: 12px 14px; }
-    .stat-card .value { font-size: 18px; }
-    .signal-table th:nth-child(4), .signal-table td:nth-child(4) { display: none; }
+  .last-update {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text-muted);
+    letter-spacing: 0.5px;
+  }
+
+  .refresh-btn {
+    width: 36px;
+    height: 36px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.22s;
+  }
+
+  .refresh-btn:hover {
+    background: var(--bg-card-hover);
+    color: var(--gold);
+    border-color: var(--border-bright);
+  }
+
+  .refresh-btn.loading svg {
+    animation: spin 0.7s linear infinite;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Market Bar ── */
+  .market-bar {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 28px;
+  }
+
+  .stat-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px 22px;
+    position: relative;
+    overflow: hidden;
+    opacity: 0;
+    transform: translateY(14px);
+    animation: fadeUp 0.5s cubic-bezier(0.22,1,0.36,1) forwards;
+  }
+
+  .stat-card:nth-child(1) { animation-delay: 0.04s; }
+  .stat-card:nth-child(2) { animation-delay: 0.08s; }
+  .stat-card:nth-child(3) { animation-delay: 0.12s; }
+  .stat-card:nth-child(4) { animation-delay: 0.16s; }
+
+  @keyframes fadeUp {
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .stat-card::after {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.04), transparent);
+  }
+
+  .stat-label {
+    font-size: 10px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 1.8px;
+    margin-bottom: 12px;
+  }
+
+  .stat-value {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 34px;
+    font-weight: 500;
+    line-height: 1;
+    margin-bottom: 8px;
+    letter-spacing: -0.5px;
+  }
+
+  .stat-value.buy { color: var(--buy); }
+  .stat-value.sell { color: var(--sell); }
+  .stat-value.hold { color: var(--hold); }
+  .stat-value.neutral { color: var(--text-primary); }
+
+  .stat-sub {
+    font-size: 12px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* ── Section Header ── */
+  .section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+  }
+
+  .section-title {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 19px;
+    font-weight: 500;
+    color: var(--text-primary);
+    letter-spacing: 0.3px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .section-title::before {
+    content: '';
+    display: block;
+    width: 3px;
+    height: 20px;
+    background: linear-gradient(180deg, var(--gold), #8b6914);
+    border-radius: 2px;
+  }
+
+  /* ── Tabs ── */
+  .tab-bar {
+    display: flex;
+    gap: 3px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 3px;
+  }
+
+  .tab-btn {
+    padding: 6px 14px;
+    border-radius: 6px;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    font-family: 'Outfit', sans-serif;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    letter-spacing: 0.2px;
+  }
+
+  .tab-btn.active {
+    background: var(--bg-card);
+    color: var(--text-primary);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.25);
+  }
+
+  .tab-btn:hover:not(.active) {
+    color: var(--text-primary);
+  }
+
+  /* ── Signals Grid ── */
+  .signals-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 12px;
+    margin-bottom: 32px;
+  }
+
+  .signal-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px 20px;
+    cursor: pointer;
+    transition: all 0.25s cubic-bezier(0.22,1,0.36,1);
+    position: relative;
+    overflow: hidden;
+    opacity: 0;
+    transform: translateY(8px);
+    animation: fadeUp 0.4s cubic-bezier(0.22,1,0.36,1) forwards;
+  }
+
+  .signal-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    transition: opacity 0.25s;
+    border-radius: var(--radius);
+  }
+
+  .signal-card:hover {
+    background: var(--bg-card);
+    border-color: var(--border-bright);
+    transform: translateY(-3px);
+    box-shadow: 0 12px 40px rgba(0,0,0,0.35);
+  }
+
+  .signal-card:hover::before { opacity: 1; }
+
+  .signal-card.buy {
+    border-color: rgba(45,212,160,0.13);
+  }
+  .signal-card.buy::before {
+    background: linear-gradient(135deg, rgba(45,212,160,0.04) 0%, transparent 60%);
+  }
+
+  .signal-card.sell {
+    border-color: rgba(240,108,108,0.13);
+  }
+  .signal-card.sell::before {
+    background: linear-gradient(135deg, rgba(240,108,108,0.04) 0%, transparent 60%);
+  }
+
+  .signal-card.hold {
+    border-color: rgba(201,168,76,0.10);
+  }
+
+  .signal-card.selected {
+    border-color: var(--gold) !important;
+    box-shadow: 0 0 0 1px var(--gold), 0 12px 40px rgba(201,168,76,0.08) !important;
+  }
+
+  .signal-card-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+
+  .signal-name {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 18px;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-bottom: 2px;
+  }
+
+  .signal-code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--text-muted);
+    letter-spacing: 0.5px;
+  }
+
+  .action-badge {
+    padding: 4px 11px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.4px;
+    flex-shrink: 0;
+  }
+
+  .action-badge.buy { background: var(--buy-dim); color: var(--buy); }
+  .action-badge.sell { background: var(--sell-dim); color: var(--sell); }
+  .action-badge.hold { background: var(--hold-dim); color: var(--hold); }
+
+  .signal-metrics {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+
+  .metric { display: flex; flex-direction: column; gap: 2px; }
+
+  .metric-label {
+    font-size: 9px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 1.8px;
+  }
+
+  .metric-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+
+  .metric-value.score {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 24px;
+    font-weight: 500;
+    line-height: 1;
+  }
+
+  .score-bar-wrap {
+    height: 3px;
+    background: var(--bg-input);
+    border-radius: 2px;
+    margin-top: 5px;
+    overflow: hidden;
+  }
+
+  .score-bar {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.9s cubic-bezier(0.22,1,0.36,1);
+  }
+
+  .score-bar.low { background: linear-gradient(90deg, var(--buy), #1fa87e); }
+  .score-bar.mid { background: linear-gradient(90deg, var(--buy), var(--hold)); }
+  .score-bar.high { background: linear-gradient(90deg, var(--hold), var(--sell)); }
+
+  .signal-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+  }
+
+  .signal-intensity { font-size: 11px; color: var(--text-secondary); }
+
+  .signal-shares {
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--gold);
+    opacity: 0.85;
+  }
+
+  .ma-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 9px;
+    border-radius: 5px;
+    font-size: 10px;
+    margin-top: 8px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .ma-tag.high { background: rgba(240,108,108,0.1); color: var(--sell); }
+  .ma-tag.low { background: var(--buy-dim); color: var(--buy); }
+  .ma-tag.neutral { background: var(--blue-dim); color: var(--blue); }
+
+  /* ── Detail Panel ── */
+  .detail-panel {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-bright);
+    border-radius: var(--radius);
+    padding: 24px;
+    margin-bottom: 32px;
+    display: none;
+    animation: fadeUp 0.3s ease forwards;
+  }
+
+  .detail-panel.visible { display: block; }
+
+  .detail-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 22px;
+  }
+
+  .detail-title {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 23px;
+    font-weight: 500;
+    letter-spacing: 0.3px;
+  }
+
+  .detail-close {
+    width: 32px;
+    height: 32px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+  }
+
+  .detail-close:hover { color: var(--text-primary); border-color: var(--border-bright); }
+
+  .detail-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+    margin-bottom: 18px;
+  }
+
+  .detail-stat {
+    background: var(--bg-card);
+    border-radius: var(--radius-sm);
+    padding: 14px 16px;
+  }
+
+  .detail-stat-label {
+    font-size: 9px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 1.8px;
+    margin-bottom: 6px;
+  }
+
+  .detail-stat-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+
+  .detail-stat-value.gold { color: var(--gold); font-size: 20px; }
+
+  .detail-hist {
+    background: var(--bg-card);
+    border-radius: var(--radius-sm);
+    padding: 14px 16px;
+    margin-bottom: 14px;
+  }
+
+  .detail-hist-title {
+    font-size: 9px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 1.8px;
+    margin-bottom: 10px;
+  }
+
+  .detail-hist-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    color: var(--text-secondary);
+    padding: 2px 0;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .detail-hist-row span:first-child { color: var(--text-muted); }
+
+  .detail-ma {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .ma-pill {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 7px 14px;
+    background: var(--bg-card);
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+  }
+
+  .ma-pill strong { font-family: 'JetBrains Mono', monospace; }
+
+  /* ── Portfolio ── */
+  .portfolio-section {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    margin-bottom: 32px;
+  }
+
+  .portfolio-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 22px;
+  }
+
+  .pnl-big {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 46px;
+    font-weight: 500;
+    line-height: 1;
+    margin: 10px 0 8px;
+    letter-spacing: -1px;
+  }
+
+  .pnl-big.positive { color: var(--buy); }
+  .pnl-big.negative { color: var(--sell); }
+  .pnl-big.zero { color: var(--text-secondary); }
+
+  .position-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+    opacity: 0;
+    animation: fadeUp 0.35s ease forwards;
+  }
+
+  .position-row:last-child { border-bottom: none; }
+
+  .position-name {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 15px;
+    font-weight: 500;
+  }
+
+  .position-meta { text-align: right; }
+
+  .position-shares {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text-secondary);
+  }
+
+  .position-pnl { font-size: 11px; margin-top: 2px; }
+  .position-pnl.pos { color: var(--buy); }
+  .position-pnl.neg { color: var(--sell); }
+
+  /* ── Grid Status ── */
+  .grid-section {
+    margin-bottom: 32px;
+  }
+
+  .grid-levels {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 12px;
+  }
+
+  .grid-level {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 12px;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text-secondary);
+  }
+
+  .grid-level.filled {
+    background: var(--buy-dim);
+    border-color: rgba(45,212,160,0.2);
+    color: var(--buy);
+  }
+
+  .grid-level .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--text-muted);
+  }
+
+  .grid-level.filled .dot { background: var(--buy); }
+
+  /* ── Skeleton ── */
+  .skeleton {
+    background: linear-gradient(90deg, var(--bg-surface) 25%, var(--bg-card) 50%, var(--bg-surface) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.6s infinite;
+    border-radius: var(--radius);
+  }
+
+  @keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+
+  .skeleton-card { height: 196px; }
+
+  /* ── Empty ── */
+  .empty-state {
+    text-align: center;
+    padding: 48px 20px;
+    color: var(--text-muted);
+    font-size: 13px;
+  }
+
+  /* ── Toast ── */
+  .toast {
+    position: fixed;
+    bottom: 28px;
+    left: 50%;
+    transform: translateX(-50%) translateY(90px);
+    background: var(--bg-card);
+    border: 1px solid var(--border-bright);
+    border-radius: var(--radius-sm);
+    padding: 10px 22px;
+    font-size: 13px;
+    color: var(--text-primary);
+    box-shadow: 0 8px 40px rgba(0,0,0,0.45);
+    transition: transform 0.35s cubic-bezier(0.22,1,0.36,1);
+    z-index: 1000;
+    pointer-events: none;
+  }
+
+  .toast.show { transform: translateX(-50%) translateY(0); }
+
+  /* ── Responsive ── */
+  @media (max-width: 900px) {
+    .app { padding: 0 16px 48px; }
+    .market-bar { grid-template-columns: repeat(2, 1fr); }
+    .signals-grid { grid-template-columns: 1fr; }
+    .portfolio-section { grid-template-columns: 1fr; }
+    .detail-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  @media (max-width: 480px) {
+    .header-inner { gap: 10px; }
+    .logo-text span { display: none; }
+    .detail-grid { grid-template-columns: 1fr 1fr; }
+    .market-bar { grid-template-columns: repeat(2, 1fr); }
   }
 </style>
 </head>
 <body>
-<div class="container">
 
-  <div class="header">
-    <div>
-      <h1>E大"长赢"150份计划</h1>
-      <div class="meta" id="meta">加载中...</div>
+<div class="app">
+  <!-- Header -->
+  <header class="header">
+    <div class="header-inner">
+      <div class="logo">
+        <div class="logo-mark">E</div>
+        <div class="logo-text">
+          <h1>E大长赢 · 150份计划</h1>
+          <span>ETF Investment System</span>
+        </div>
+      </div>
+      <div class="header-right">
+        <div class="live-badge">
+          <div class="live-dot"></div>
+          <span>Live</span>
+        </div>
+        <div class="last-update" id="lastUpdate">--:--:--</div>
+        <button class="refresh-btn" id="refreshBtn" title="刷新数据">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M23 4v6h-6"/><path d="M1 20v-6h6"/>
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+          </svg>
+        </button>
+      </div>
     </div>
-    <button class="refresh-btn" onclick="loadData()">刷新数据</button>
+  </header>
+
+  <!-- Market Summary -->
+  <div class="market-bar" id="marketBar">
+    <div class="stat-card skeleton-card"></div>
+    <div class="stat-card skeleton-card"></div>
+    <div class="stat-card skeleton-card"></div>
+    <div class="stat-card skeleton-card"></div>
   </div>
 
-  <!-- 统计摘要 -->
-  <div class="summary-bar">
-    <div class="stat-card">
-      <div class="label">品种数量</div>
-      <div class="value blue" id="stat-total">-</div>
-    </div>
-    <div class="stat-card">
-      <div class="label">买入信号</div>
-      <div class="value green" id="stat-buy">-</div>
-    </div>
-    <div class="stat-card">
-      <div class="label">持有观望</div>
-      <div class="value yellow" id="stat-hold">-</div>
-    </div>
-    <div class="stat-card">
-      <div class="label">综合分位</div>
-      <div class="value" id="stat-avg">-</div>
-    </div>
-  </div>
-
-  <!-- 信号表 -->
-  <div class="section">
-    <div class="section-title">
-      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-      实时估值信号
-    </div>
-    <div id="signal-loading" class="loading">正在拉取数据</div>
-    <div id="signal-table-wrap" style="display:none">
-      <table class="signal-table">
-        <thead>
-          <tr>
-            <th>品种</th>
-            <th>PE</th>
-            <th>分位区间</th>
-            <th>历史区间</th>
-            <th>操作</th>
-          </tr>
-        </thead>
-        <tbody id="signal-tbody"></tbody>
-      </table>
-    </div>
-    <div class="note">数据来源: akshare (乐咕乐股PE/PB历史)</div>
-  </div>
-
-  <!-- 持仓状态 -->
-  <div class="section">
-    <div class="section-title">
-      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg>
-      持仓状态
-    </div>
-    <div id="portfolio-content">
-      <div class="empty-state">暂无持仓记录。使用命令行 <code>python main.py execute 品种=份数</code> 录入</div>
+  <!-- Signals -->
+  <div class="section-header">
+    <h2 class="section-title">实时信号</h2>
+    <div class="tab-bar">
+      <button class="tab-btn active" data-filter="all">全部</button>
+      <button class="tab-btn" data-filter="BUY">买入</button>
+      <button class="tab-btn" data-filter="HOLD">持有</button>
+      <button class="tab-btn" data-filter="SELL">卖出</button>
     </div>
   </div>
 
-  <!-- 网格状态 -->
-  <div class="section">
-    <div class="section-title">
-      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-      华宝油气网格
-    </div>
-    <div class="grid-levels" id="grid-content">
-      <div class="grid-level">L1 0.5225</div>
-      <div class="grid-level">L2 0.4964</div>
-      <div class="grid-level">L3 0.4716</div>
-      <div class="grid-level">L4 0.4480</div>
-      <div class="grid-level">L5 0.4256</div>
-      <div class="grid-level">L6 0.4043</div>
-      <div class="grid-level">L7 0.3841</div>
-      <div class="grid-level">L8 0.3649</div>
-      <div class="grid-level">L9 0.3467</div>
-      <div class="grid-level">L10 0.3294</div>
-    </div>
-    <div class="note">每格5%间距，当前价格0.5500（暂无触发）</div>
+  <div class="signals-grid" id="signalsGrid">
+    <div class="signal-card skeleton-card"></div>
+    <div class="signal-card skeleton-card"></div>
+    <div class="signal-card skeleton-card"></div>
+    <div class="signal-card skeleton-card"></div>
   </div>
 
-  <!-- 心理话术 -->
-  <div class="section">
-    <div class="section-title">
-      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-      心理按摩
+  <!-- Detail Panel -->
+  <div class="detail-panel" id="detailPanel">
+    <div class="detail-header">
+      <h3 class="detail-title" id="detailTitle">—</h3>
+      <button class="detail-close" onclick="closeDetail()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M18 6L6 18M6 6l12 12"/>
+        </svg>
+      </button>
     </div>
-    <div class="psychology" id="psychology-content">
-      <div class="loading">正在生成</div>
+    <div class="detail-grid" id="detailGrid"></div>
+    <div class="detail-hist">
+      <div class="detail-hist-title">历史分位（10年滚动窗口）</div>
+      <div id="detailHistRows"></div>
+    </div>
+    <div class="detail-ma" id="detailMA"></div>
+  </div>
+
+  <!-- Portfolio -->
+  <div class="section-header">
+    <h2 class="section-title">持仓状态</h2>
+  </div>
+
+  <div class="portfolio-section">
+    <div class="portfolio-card">
+      <div class="stat-label">总浮盈亏</div>
+      <div class="pnl-big zero" id="totalPnl">—</div>
+      <div class="stat-sub" id="totalPnlPct">暂无持仓数据</div>
+    </div>
+    <div class="portfolio-card">
+      <div class="stat-label">持仓明细</div>
+      <div id="positionsList">
+        <div class="empty-state">空空如也，尚未建仓</div>
+      </div>
     </div>
   </div>
 
+  <!-- Grid Status -->
+  <div class="grid-section">
+    <div class="section-header">
+      <h2 class="section-title">华宝油气网格</h2>
+    </div>
+    <div class="portfolio-card">
+      <div class="stat-label">10层 · 每格5%间距</div>
+      <div class="grid-levels" id="gridLevels"></div>
+    </div>
+  </div>
 </div>
 
+<div class="toast" id="toast"></div>
+
 <script>
-function pctColor(pct) {
-  const v = parseFloat(pct);
-  if (isNaN(v)) return '#8b949e';
-  if (v < 15) return '#3fb950';
-  if (v < 30) return '#56d364';
-  if (v < 50) return '#d29922';
-  if (v < 70) return '#e3b341';
-  if (v < 85) return '#f0883e';
-  return '#f85149';
-}
+  // ── State ──
+  let allSignals = [];
+  let selectedName = null;
+  let currentFilter = 'all';
 
-function pctZone(pct) {
-  const v = parseFloat(pct);
-  if (isNaN(v)) return {label:'需手动', cls:'action-manual'};
-  if (v < 15) return {label:'极度低估', cls:'action-buy'};
-  if (v < 30) return {label:'低估', cls:'action-buy'};
-  if (v < 50) return {label:'偏低', cls:'action-hold'};
-  if (v < 70) return {label:'偏高', cls:'action-hold'};
-  if (v < 85) return {label:'高估', cls:'action-sell'};
-  return {label:'极度高估', cls:'action-sell'};
-}
+  // ── Utils ──
+  function $(sel) { return document.querySelector(sel); }
+  function $$(sel) { return document.querySelectorAll(sel); }
 
-function actionLabel(action) {
-  const map = {BUY:'🟢 买入', SELL:'🔴 卖出', HOLD:'🟡 持有', '手动':'⚪ 手动'};
-  return map[action] || action;
-}
-
-function actionCls(action) {
-  const map = {BUY:'action-buy', SELL:'action-sell', HOLD:'action-hold', '手动':'action-manual'};
-  return map[action] || '';
-}
-
-function actionColor(action) {
-  const map = {BUY:'#3fb950', SELL:'#f85149', HOLD:'#d29922', '手动':'#58a6ff'};
-  return map[action] || '#8b949e';
-}
-
-async function loadData() {
-  document.getElementById('meta').textContent = '正在加载...';
-  document.getElementById('signal-loading').style.display = 'block';
-  document.getElementById('signal-table-wrap').style.display = 'none';
-  document.getElementById('psychology-content').innerHTML = '<div class="loading">正在生成</div>';
-
-  try {
-    const [statusRes, portfolioRes] = await Promise.all([
-      fetch('status.json'),
-      fetch('portfolio.json').catch(() => null)
-    ]);
-
-    const status = await statusRes.json();
-    const portfolio = portfolioRes ? await portfolioRes.json() : null;
-
-    // Meta
-    const now = new Date();
-    document.getElementById('meta').textContent =
-      `更新: ${now.toLocaleString('zh-CN')} · 数据来源: akshare`;
-
-    // Summary
-    const signals = status.signals || [];
-    document.getElementById('stat-total').textContent = signals.length;
-    document.getElementById('stat-buy').textContent = signals.filter(s => s.action === 'BUY').length;
-    document.getElementById('stat-hold').textContent = signals.filter(s => s.action === 'HOLD').length;
-
-    // Avg pct
-    const pcts = signals.map(s => parseFloat(String(s.score).replace('%',''))).filter(v => !isNaN(v));
-    const avg = pcts.length ? (pcts.reduce((a,b)=>a+b,0)/pcts.length).toFixed(0) : '-';
-    document.getElementById('stat-avg').textContent = avg + '%';
-    document.getElementById('stat-avg').style.color = pctColor(avg);
-
-    // Signal table
-    renderSignals(signals);
-
-    // Portfolio
-    renderPortfolio(portfolio, status.signals || []);
-
-    // Psychology
-    renderPsychology(avg, signals);
-
-  } catch(e) {
-    console.error(e);
-    document.getElementById('meta').textContent = '加载失败，请手动刷新';
-    document.getElementById('signal-loading').innerHTML = '<div class="empty-state">数据加载失败。请在命令行运行 <code>python main.py status</code> 生成 status.json</div>';
-  }
-}
-
-function renderSignals(signals) {
-  document.getElementById('signal-loading').style.display = 'none';
-  document.getElementById('signal-table-wrap').style.display = 'block';
-
-  const tbody = document.getElementById('signal-tbody');
-  tbody.innerHTML = '';
-
-  signals.forEach(s => {
-    const pct = String(s.score || '50').replace('%','');
-    const zone = pctZone(pct);
-    const color = pctColor(pct);
-    const hist = s.history || {};
-
-    const row = document.createElement('tr');
-    row.innerHTML = `
-      <td>
-        <div class="name">${s.name}</div>
-      </td>
-      <td class="pe">${s.pe_ttm || '-'}</td>
-      <td>
-        <div class="pct-bar-wrap">
-          <div class="pct-bar">
-            <div class="pct-bar-fill" style="width:${Math.min(pct,100)}%;background:${color}"></div>
-          </div>
-          <span class="pct-val" style="color:${color}">${pct}%</span>
-        </div>
-        <div class="pct-zone ${zone.cls}" style="margin-top:6px">${zone.label}</div>
-      </td>
-      <td class="pe-range">
-        ${hist.pe_min ? `${hist.pe_min}–${hist.pe_max}` : '-'}
-      </td>
-      <td>
-        <span class="action-badge ${zone.cls}">${actionLabel(s.action)}</span>
-      </td>
-    `;
-    tbody.appendChild(row);
-  });
-}
-
-function renderPortfolio(portfolio, signals) {
-  const el = document.getElementById('portfolio-content');
-  if (!portfolio || !portfolio.positions || Object.keys(portfolio.positions).length === 0) {
-    el.innerHTML = '<div class="empty-state">暂无持仓记录。使用 <code>python main.py execute 品种=份数</code> 录入持仓</div>';
-    return;
+  function fmt(v, d = 2) {
+    if (v === null || v === undefined || v === '') return '—';
+    return typeof v === 'number' ? v.toFixed(d) : v;
   }
 
-  let html = '';
-  for (const [name, pos] of Object.entries(portfolio.positions)) {
-    const shares = pos.shares || 0;
-    if (shares <= 0) continue;
+  function fmtPnl(v) {
+    if (v > 0) return `+${v.toFixed(2)}万`;
+    if (v < 0) return `${v.toFixed(2)}万`;
+    return '0.00万';
+  }
 
-    // Find signal for this name
-    const sig = signals.find(s => s.name === name);
-    const currentPrice = sig ? (sig.price || '-') : '-';
-    const avgCost = pos.avg_cost || 1;
-    const ratio = (currentPrice !== '-' && avgCost) ? (parseFloat(currentPrice) / avgCost) : 1;
-    const pnlPct = ((ratio - 1) * 100).toFixed(1);
-    const pnlClass = ratio >= 1 ? 'pos' : 'neg';
-    const pnlSign = ratio >= 1 ? '+' : '';
+  function showToast(msg) {
+    const t = $('#toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2500);
+  }
 
-    html += `
-      <div class="portfolio-row">
-        <div class="left">
-          <span class="name">${name}</span>
-          <span class="shares">${shares}份 · 均价 ${avgCost.toFixed(4)}</span>
-        </div>
-        <span class="pnl ${pnlClass}">${pnlSign}${pnlPct}%</span>
+  function scoreColor(pct) {
+    if (pct <= 30) return 'low';
+    if (pct <= 70) return 'mid';
+    return 'high';
+  }
+
+  function actionLabel(action) {
+    return {BUY:'买入', HOLD:'持有', SELL:'卖出'}[action] || action;
+  }
+
+  function barWidth(pct) {
+    if (pct === null || isNaN(pct)) return 50;
+    return Math.min(100, Math.max(1, pct));
+  }
+
+  function maZone(zone) {
+    if (!zone) return {cls:'neutral', icon:'↔'};
+    if (zone === '高位预警') return {cls:'high', icon:'⚠'};
+    if (zone === '低位机会') return {cls:'low', icon:'✓'};
+    return {cls:'neutral', icon:'↔'};
+  }
+
+  // ── Render Market Bar ──
+  function renderMarketBar(summary) {
+    const avg = summary.avg_pct;
+    const avgCls = avg <= 30 ? 'buy' : avg <= 70 ? 'neutral' : 'sell';
+    const avgLabel = avg <= 30 ? '低估' : avg <= 70 ? '中性' : '高估';
+
+    $('#marketBar').innerHTML = `
+      <div class="stat-card">
+        <div class="stat-label">市场综合分位</div>
+        <div class="stat-value ${avgCls}">${avg.toFixed(1)}%</div>
+        <div class="stat-sub">${avgLabel}区间</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">买入信号</div>
+        <div class="stat-value buy">${summary.buy}</div>
+        <div class="stat-sub">${(summary.buy_names||[]).slice(0,2).join(' / ') || '无'}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">卖出信号</div>
+        <div class="stat-value sell">${summary.sell}</div>
+        <div class="stat-sub">${(summary.sell_names||[]).slice(0,2).join(' / ') || '无'}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">监控品种</div>
+        <div class="stat-value neutral">${summary.total}</div>
+        <div class="stat-sub">全量品种</div>
       </div>
     `;
   }
 
-  if (!html) {
-    el.innerHTML = '<div class="empty-state">空仓</div>';
-    return;
+  // ── Render Signals ──
+  function renderSignals(signals) {
+    const filtered = currentFilter === 'all'
+      ? signals
+      : signals.filter(s => s.action === currentFilter);
+
+    if (filtered.length === 0) {
+      $('#signalsGrid').innerHTML = `<div class="empty-state">暂无${currentFilter === 'all' ? '' : actionLabel(currentFilter)}信号</div>`;
+      return;
+    }
+
+    $('#signalsGrid').innerHTML = filtered.map((s, i) => {
+      const pct = s.pct || 50;
+      const barClass = scoreColor(pct);
+      const actionClass = s.action.toLowerCase();
+      const isSelected = s.name === selectedName;
+      const ma = s.ma_trend;
+      const maInfo = maZone(ma ? ma.zone : null);
+
+      return `
+      <div class="signal-card ${actionClass}${isSelected ? ' selected' : ''}"
+           style="animation-delay:${i * 0.04}s"
+           onclick="selectSignal('${s.name.replace(/'/g,"\\'")}')">
+        <div class="signal-card-header">
+          <div>
+            <div class="signal-name">${s.name}</div>
+            <div class="signal-code">${s.code}</div>
+          </div>
+          <span class="action-badge ${actionClass}">${actionLabel(s.action)}</span>
+        </div>
+        <div class="signal-metrics">
+          <div class="metric">
+            <div class="metric-label">PE-TTM</div>
+            <div class="metric-value">${fmt(s.pe_ttm) || '—'}</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">PB</div>
+            <div class="metric-value">${fmt(s.pb) || '—'}</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">价格</div>
+            <div class="metric-value">${s.price != null ? fmt(s.price, 3) : '—'}</div>
+          </div>
+          <div class="metric">
+            <div class="metric-label">综合分位</div>
+            <div class="metric-value score">${s.score}</div>
+            <div class="score-bar-wrap">
+              <div class="score-bar ${barClass}" style="width:${barWidth(pct)}%"></div>
+            </div>
+          </div>
+        </div>
+        ${ma ? `<span class="ma-tag ${maInfo.cls}">MA250 ${maInfo.icon} ${ma.zone || '正常区间'} ${ma.deviation > 0 ? '+' : ''}${ma.deviation}%</span>` : ''}
+        <div class="signal-footer">
+          <span class="signal-intensity">${s.intensity || ''}</span>
+          <span class="signal-shares">${s.shares > 0 ? `+${s.shares}份` : ''}</span>
+        </div>
+      </div>`;
+    }).join('');
   }
 
-  // Summary
-  const totalShares = Object.values(portfolio.positions).reduce((a,b) => a + (b.shares||0), 0);
-  const cash = portfolio.cash || 0;
-  const pnl = portfolio.unrealized_pnl || {};
-  const totalPnl = pnl.total !== undefined ? pnl.total : 0;
-  const totalPnlPct = pnl.pct || 0;
+  // ── Select Signal ──
+  function selectSignal(name) {
+    selectedName = selectedName === name ? null : name;
+    const s = allSignals.find(x => x.name === name);
 
-  el.innerHTML = `
-    <div style="margin-bottom:12px;padding:12px;background:rgba(255,255,255,0.04);border-radius:8px;font-size:13px;color:var(--text-dim)">
-      总持仓 ${totalShares}份 · 现金 ${cash}份 · 更新时间 ${portfolio.updated ? portfolio.updated.substring(0,10) : '-'}
-      ${totalPnl !== 0 ? `<span style="margin-left:16px;font-weight:600;color:${totalPnl>=0?'var(--green)':'var(--red)'}">浮盈亏 ${totalPnl>=0?'+':''}${totalPnl.toFixed(2)}万 (${totalPnlPct>=0?'+':''}${totalPnlPct.toFixed(1)}%)</span>` : ''}
-    </div>
-    ${html}
-  `;
-}
+    renderSignals(allSignals);
 
-function renderPsychology(avg, signals) {
-  const el = document.getElementById('psychology-content');
-  const v = parseFloat(avg) || 50;
-  const buys = signals.filter(s => s.action === 'BUY').length;
-  const sells = signals.filter(s => s.action === 'SELL').length;
+    if (!selectedName || !s) {
+      closeDetail();
+      return;
+    }
 
-  let content = '';
-  if (v < 20) {
-    content = `<p><span class="highlight">历史性机会期</span> — 当前市场综合分位约${v}%，处于极度低估区域。</p>
-<p>多个品种已进入重仓买入区间。记住：<strong>跌得越多，买得越多</strong>。越跌越买，越长越好。</p>
-<p>本轮买入后，请做好最大跌幅的心理准备。历史上，每一次这样的时候，最终都给投资者丰厚的回报。握紧筹码，等待微笑曲线。</p>`;
-  } else if (v < 40) {
-    content = `<p><span class="highlight">正常布局期</span> — 当前市场综合分位约${v}%，处于正常偏低区域。</p>
-<p>估值有吸引力，可以继续布局。我们的目标不是在最低点买满，而是在合理价格慢慢收集筹码。<strong>越低估买越多，这才是节奏</strong>。</p>`;
-  } else if (v < 60) {
-    content = `<p><span class="warn">持有观察期</span> — 当前市场综合分位约${v}%，整体处于正常偏高区域。</p>
-<p>到了牛市，人声鼎沸，大部分时间都是噪音。如果你的操作跟大部分人一样，那收益也就跟大部分人一样 — 亏钱。<strong>保持仓位，等待高估区域的收割时机</strong>。</p>`;
-  } else {
-    content = `<p><span class="danger">收割警惕期</span> — 当前市场综合分位约${v}%，已进入高估区域。</p>
-<p>请注意逐步收割利润。牛市不是比谁赚最多，是比谁保住利润。身边的噪音会越来越大，请保持清醒。</p>`;
+    const ma = s.ma_trend;
+    const maInfo = maZone(ma ? ma.zone : null);
+
+    $('#detailTitle').textContent = `${s.name} (${s.code})`;
+    $('#detailGrid').innerHTML = `
+      <div class="detail-stat"><div class="detail-stat-label">PE-TTM</div><div class="detail-stat-value">${fmt(s.pe_ttm)||'—'}</div></div>
+      <div class="detail-stat"><div class="detail-stat-label">PE分位</div><div class="detail-stat-value">${s.pe_pct||'—'}</div></div>
+      <div class="detail-stat"><div class="detail-stat-label">PB</div><div class="detail-stat-value">${fmt(s.pb)||'—'}</div></div>
+      <div class="detail-stat"><div class="detail-stat-label">PB分位</div><div class="detail-stat-value">${s.pb_pct||'—'}</div></div>
+      <div class="detail-stat"><div class="detail-stat-label">综合分位</div><div class="detail-stat-value gold">${s.score}</div></div>
+      <div class="detail-stat"><div class="detail-stat-label">ETF价格</div><div class="detail-stat-value">${s.price != null ? fmt(s.price,3) : '—'}</div></div>
+      <div class="detail-stat"><div class="detail-stat-label">操作</div><div class="detail-stat-value" style="color:var(--${s.action==='BUY'?'buy':s.action==='SELL'?'sell':'hold'})">${actionLabel(s.action)}</div></div>
+      <div class="detail-stat"><div class="detail-stat-label">最大跌幅</div><div class="detail-stat-value">${s.max_drop||'—'}</div></div>
+    `;
+
+    const hist = s.history || {};
+    const histRows = [];
+    if (hist.pe_min != null) histRows.push(`<div class="detail-hist-row"><span>PE历史最低</span><span>${fmt(hist.pe_min)}</span></div>`);
+    if (hist.pe_max != null) histRows.push(`<div class="detail-hist-row"><span>PE历史最高</span><span>${fmt(hist.pe_max)}</span></div>`);
+    if (hist.pe_mean != null) histRows.push(`<div class="detail-hist-row"><span>PE历史均值</span><span>${fmt(hist.pe_mean)}</span></div>`);
+    histRows.push(`<div class="detail-hist-row" style="margin-top:6px"><span style="font-size:10px">${hist.note||'10年滚动窗口分位'}</span><span></span></div>`);
+    $('#detailHistRows').innerHTML = histRows.join('');
+
+    let maHTML = '';
+    if (ma) {
+      const devColor = ma.deviation >= 20 ? 'var(--sell)' : ma.deviation <= -15 ? 'var(--buy)' : 'var(--text-primary)';
+      maHTML = `
+        <div class="ma-pill"><span>MA250</span><strong>${fmt(ma.ma_value,3)}</strong></div>
+        <div class="ma-pill"><span>偏离度</span><strong style="color:${devColor}">${ma.deviation>0?'+':''}${ma.deviation}%</strong></div>
+        <div class="ma-pill"><span>区间</span><strong style="color:${maInfo.cls==='high'?'var(--sell)':maInfo.cls==='low'?'var(--buy)':'var(--blue)'}">${ma.zone||'—'}</strong></div>`;
+    }
+    $('#detailMA').innerHTML = maHTML;
+
+    $('#detailPanel').classList.add('visible');
+    setTimeout(() => {
+      const panel = $('#detailPanel');
+      if (panel) panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }, 80);
   }
 
-  el.innerHTML = content;
-}
+  function closeDetail() {
+    selectedName = null;
+    $('#detailPanel').classList.remove('visible');
+  }
 
-// Load on page load
-loadData();
+  // ── Render Portfolio ──
+  function renderPortfolio(data) {
+    const pnl = data.unrealized_pnl || {};
+    const total = pnl.total || 0;
+    const totalPct = pnl.pct || 0;
+
+    const pnlEl = $('#totalPnl');
+    pnlEl.textContent = fmtPnl(total);
+    pnlEl.className = `pnl-big ${total > 0 ? 'positive' : total < 0 ? 'negative' : 'zero'}`;
+
+    const pos = data.positions;
+    if (!pos || Object.keys(pos).length === 0) {
+      $('#totalPnlPct').textContent = `现金 ${data.cash} 份 / ${data.total_shares} 份`;
+      $('#positionsList').innerHTML = `<div class="empty-state">空空如也，尚未建仓</div>`;
+      return;
+    }
+
+    $('#totalPnlPct').textContent = total !== 0
+      ? `${totalPct > 0 ? '+' : ''}${totalPct.toFixed(1)}%`
+      : `现金 ${data.cash} 份 / ${data.total_shares} 份`;
+
+    const pnlPosList = pnl.positions || [];
+    let html = '';
+    for (const [name, posData] of Object.entries(pos)) {
+      const pItem = pnlPosList.find(p => p.品种 === name);
+      const pnlVal = pItem ? pItem['浮盈亏(万)'] : 0;
+      const pnlPct = pItem ? pItem['浮盈亏率'] : 0;
+      const cls = pnlVal > 0 ? 'pos' : pnlVal < 0 ? 'neg' : '';
+      html += `
+        <div class="position-row" style="animation-delay:${Object.keys(pos).indexOf(name) * 0.05}s">
+          <span class="position-name">${name}</span>
+          <div class="position-meta">
+            <div class="position-shares">${posData.shares}份 @ ${fmt(posData.avg_cost,4)}</div>
+            <div class="position-pnl ${cls}">${pnlVal !== 0 ? fmtPnl(pnlVal) + ` (${pnlPct>0?'+':''}${pnlPct.toFixed(1)}%)` : '成本价'}</div>
+          </div>
+        </div>`;
+    }
+    $('#positionsList').innerHTML = html;
+  }
+
+  // ── Render Grid ──
+  function renderGrid() {
+    // 华宝油气网格参数
+    const base = 0.55, spacing = 5, levels = 10;
+    let price = base, rows = '';
+    for (let i = 1; i <= levels; i++) {
+      const trigger = (price * (1 - spacing / 100)).toFixed(4);
+      const pct = ((parseFloat(trigger) - base) / base * 100).toFixed(1);
+      rows += `<div class="grid-level"><span class="dot"></span>L${i} ${trigger} <span style="opacity:0.5">(${pct}%)</span></div>`;
+      price = parseFloat(trigger);
+    }
+    $('#gridLevels').innerHTML = rows;
+  }
+
+  // ── Fetch Data ──
+  async function fetchAll() {
+    const btn = $('#refreshBtn');
+    btn.classList.add('loading');
+
+    try {
+      const [statusRes, pfRes] = await Promise.all([
+        fetch('/status.json'),
+        fetch('/portfolio.json').catch(() => null)
+      ]);
+
+      if (!statusRes.ok) throw new Error('API error');
+
+      const status = await statusRes.json();
+      const portfolio = pfRes && pfRes.ok ? await pfRes.json() : null;
+
+      allSignals = status.signals || [];
+
+      renderMarketBar(status.summary);
+      renderSignals(allSignals);
+      renderPortfolio(portfolio || {
+        unrealized_pnl: {},
+        positions: {},
+        cash: 150,
+        total_shares: 150
+      });
+
+      const now = new Date();
+      $('#lastUpdate').textContent = now.toLocaleTimeString('zh-CN', {
+        hour: '2-digit', minute: '2-digit', second: '2-digit'
+      });
+
+    } catch (e) {
+      console.error(e);
+      showToast('数据加载失败，请检查网络');
+    } finally {
+      btn.classList.remove('loading');
+    }
+  }
+
+  // ── Tab Filters ──
+  $$('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      $$('.tab-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentFilter = btn.dataset.filter;
+      renderSignals(allSignals);
+    });
+  });
+
+  $('#refreshBtn').addEventListener('click', fetchAll);
+
+  // ── Init ──
+  renderGrid();
+  fetchAll();
+  setInterval(fetchAll, 300000); // 5min auto-refresh
 </script>
 </body>
 </html>
