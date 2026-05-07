@@ -10,6 +10,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import pandas as pd
 from datetime import datetime
+from strategies.universe import UNIVERSE, ASSET_CLASS_LIMITS, ALL_UNIVERSE
 
 
 class PortfolioManager:
@@ -254,6 +255,263 @@ class PortfolioManager:
                 print(f"  {icon} {h['date']} {h['name']} {h['shares']}份 @{h['price']:.4f}")
 
         print("=" * 65)
+
+# 再平衡阈值（漂移超过此比例则触发调仓）
+REBALANCE_INDIVIDUAL_THRESHOLD = 0.05   # 单品偏离目标5%以上
+REBALANCE_CLASS_THRESHOLD = 0.08        # 大类偏离目标8%以上
+REBALANCE_CASH_THRESHOLD = 0.10         # 现金偏离超过10%（满仓或空仓）
+
+
+class RebalanceEngine:
+    """
+    E大定期再平衡引擎
+    核心逻辑：
+    1. 漂移检测：检查单品/大类是否偏离目标配置
+    2. 优先级排序：按估值低买高卖
+    3. 生成调仓建议：卖高估 → 买低估
+    """
+
+    def __init__(self, portfolio_manager: 'PortfolioManager', valuations: dict):
+        """
+        portfolio_manager: PortfolioManager 实例
+        valuations: {品种: {'score': float, 'action': str, ...}}
+        """
+        self.pm = portfolio_manager
+        self.valuations = valuations  # 品种估值信号
+        self.total = portfolio_manager.data.get('total_shares', 150)
+        self._analyze()
+
+    def _analyze(self):
+        """分析当前配置与目标的差距"""
+        positions = self.pm.data.get('positions', {})
+
+        # 目标配置（每个品种的目标份数）
+        self.targets = {}    # {品种: 目标份数比例}
+        for name, info in UNIVERSE.items():
+            max_alloc = info.get('max_allocation', 0.20)
+            self.targets[name] = max_alloc
+
+        # 当前配置
+        self.current = {}   # {品种: 当前份数比例}
+        for name, pos in positions.items():
+            shares = pos.get('shares', 0)
+            self.current[name] = shares / self.total
+
+        # 大类汇总
+        self.class_current = {}
+        self.class_target = {}
+        for name in ALL_UNIVERSE:
+            info = UNIVERSE.get(name, {})
+            cls = info.get('type', 'other')
+            self.class_current[cls] = self.class_current.get(cls, 0) + self.current.get(name, 0)
+            self.class_target[cls] = max(self.class_target.get(cls, 0), info.get('max_allocation', 0.20))
+
+        # 现金
+        self.cash_ratio = self.pm.data.get('cash', 0) / self.total
+        self.cash_shares = self.pm.data.get('cash', 0)
+
+    def check_drift(self) -> list:
+        """检测漂移，返回偏离项列表"""
+        drifts = []
+
+        # 单品漂移：只检查当前已持仓的品种
+        for name, pos in self.pm.data.get('positions', {}).items():
+            info = UNIVERSE.get(name, {})
+            if not info:
+                continue
+            max_alloc = info.get('max_allocation', 0.20)
+            cur = self.current.get(name, 0)
+            drift = cur - max_alloc
+
+            if abs(drift) >= REBALANCE_INDIVIDUAL_THRESHOLD:
+                val = self.valuations.get(name, {})
+                drifts.append({
+                    'level': '单品超配' if drift > 0 else '单品不足',
+                    'name': name,
+                    'current_pct': round(cur * 100, 1),
+                    'target_pct': round(max_alloc * 100, 1),
+                    'drift_pct': round(drift * 100, 1),
+                    'score': val.get('score', 'N/A'),
+                    'action': val.get('action', 'N/A'),
+                    'type': info.get('type', 'other'),
+                    'max_shares': int(max_alloc * self.total),
+                    'current_shares': round(cur * self.total, 1),
+                })
+
+        # 大类漂移
+        for cls in self.class_current:
+            cur = self.class_current.get(cls, 0)
+            target = self.class_target.get(cls, 0)
+            drift = cur - target
+            if abs(drift) >= REBALANCE_CLASS_THRESHOLD:
+                drifts.append({
+                    'level': '大类超配' if drift > 0 else '大类不足',
+                    'name': cls,
+                    'current_pct': round(cur * 100, 1),
+                    'target_pct': round(target * 100, 1),
+                    'drift_pct': round(drift * 100, 1),
+                    'score': 'N/A',
+                    'action': 'N/A',
+                    'type': cls,
+                    'max_shares': int(target * self.total),
+                    'current_shares': round(cur * self.total, 1),
+                })
+
+        # 现金偏离
+        if abs(self.cash_ratio - 0.0) >= REBALANCE_CASH_THRESHOLD and self.cash_ratio >= 0.15:
+            drifts.append({
+                'level': '现金冗余',
+                'name': '现金',
+                'current_pct': round(self.cash_ratio * 100, 1),
+                'target_pct': 0,
+                'drift_pct': round(self.cash_ratio * 100, 1),
+                'cash_shares': self.cash_shares,
+            })
+
+        return drifts
+
+    def generate_rebalance_plan(self) -> dict:
+        """
+        生成再平衡计划
+        原则：
+        1. 只卖高估/正常偏高区的品种（PE分位>=50%）
+        2. 只买低估/正常偏低区的品种（PE分位<50%）
+        3. 优先处理漂移最大的项
+        4. 保持现金不低于总份数的5%
+        """
+        drifts = self.check_drift()
+        if not drifts:
+            return {'needs_rebalance': False, 'buys': [], 'sells': [], 'reason': '配置正常，无漂移'}
+
+        sells = []
+        buys = []
+
+        # 按漂移幅度排序，优先处理最极端的
+        drifts.sort(key=lambda x: -abs(x['drift_pct']))
+
+        cash = self.cash_shares
+        min_cash = self.total * 0.05  # 最少保留5%现金
+
+        for d in drifts:
+            if d['level'] == '单品超配' and d['drift_pct'] > 0:
+                # 超配 → 建议卖出
+                excess_pct = d['drift_pct'] / 100
+                excess_shares = excess_pct * self.total
+
+                # 检查估值是否支持卖出（高估区才卖）
+                val = self.valuations.get(d['name'], {})
+                score_str = val.get('score', '50%')
+                try:
+                    score = float(str(score_str).replace('%', ''))
+                except:
+                    score = 50.0
+
+                if score >= 50:
+                    sell_shares = min(int(excess_shares * 0.5), int(d['current_shares'] * 0.3)) if d['level'] == '单品' else int(excess_shares * 0.5)
+                    sell_shares = max(1, sell_shares)
+                    sells.append({
+                        'name': d['name'],
+                        'reason': f"超配漂移{d['drift_pct']:+.1f}%，估值{score:.0f}%分位，建议卖出",
+                        'sell_shares': sell_shares,
+                        'priority': abs(d['drift_pct']),
+                        'score': score,
+                    })
+
+            elif d['level'] in ('单品不足',) and d['drift_pct'] < 0:
+                # 不足 → 建议买入（但需要现金）
+                shortage_pct = abs(d['drift_pct']) / 100
+                shortage_shares = shortage_pct * self.total
+                available = cash - min_cash
+
+                if available > 1:
+                    val = self.valuations.get(d['name'], {})
+                    score_str = val.get('score', '50%')
+                    try:
+                        score = float(str(score_str).replace('%', ''))
+                    except:
+                        score = 50.0
+
+                    # 低估才买
+                    if score <= 50:
+                        buy_shares = min(int(shortage_shares * 0.3), max(1, int(available * 0.5)))
+                        if buy_shares >= 1:
+                            buys.append({
+                                'name': d['name'],
+                                'reason': f"配置不足{d['drift_pct']:+.1f}%，估值{score:.0f}%分位，建议买入",
+                                'buy_shares': buy_shares,
+                                'priority': abs(d['drift_pct']),
+                                'score': score,
+                            })
+                            cash -= buy_shares
+
+        # 按优先级排序
+        sells.sort(key=lambda x: -x['priority'])
+        buys.sort(key=lambda x: x['score'])  # 估值越低越优先
+
+        needs = len(sells) > 0 or len(buys) > 0
+        reason = '配置正常，无漂移' if not needs else f'检测到{len(sells)}个超配项，{len(buys)}个不足项'
+
+        return {
+            'needs_rebalance': needs,
+            'buys': buys,
+            'sells': sells,
+            'reason': reason,
+            'current_cash': self.cash_shares,
+            'cash_after_plan': cash,
+        }
+
+    def get_rebalance_report(self) -> dict:
+        """完整的再平衡诊断报告"""
+        drifts = self.check_drift()
+        plan = self.generate_rebalance_plan()
+        return {
+            'needs_rebalance': plan['needs_rebalance'],
+            'drifts': drifts,
+            'plan': plan,
+            'cash_ratio': round(self.cash_ratio * 100, 1),
+            'cash_shares': self.cash_shares,
+            'total_shares': self.total,
+            'thresholds': {
+                'individual': REBALANCE_INDIVIDUAL_THRESHOLD * 100,
+                'class': REBALANCE_CLASS_THRESHOLD * 100,
+                'cash': REBALANCE_CASH_THRESHOLD * 100,
+            },
+        }
+
+
+def print_rebalance_report(report: dict):
+    """打印再平衡报告"""
+    print("\n" + "=" * 65)
+    print("  E大定期再平衡诊断报告")
+    print("=" * 65)
+
+    print(f"\n  现金: {report['cash_shares']:.0f}/{report['total_shares']} 份 ({report['cash_ratio']}%)")
+    print(f"  阈值: 单品>{report['thresholds']['individual']}% 大类>{report['thresholds']['class']}%")
+
+    drifts = report['drifts']
+    if not drifts:
+        print("\n  ✅ 配置正常，无漂移")
+    else:
+        print(f"\n  漂移检测 ({len(drifts)}项):")
+        print(f"  {'级别':<8} {'品种/大类':<10} {'当前':>6} {'目标':>6} {'漂移':>6} {'分位':>6} {'操作':>5}")
+        print("  " + "-" * 55)
+        for d in drifts:
+            print(f"  {d['level']:<8} {d['name']:<10} {d['current_pct']:>5.1f}% {d['target_pct']:>5.1f}% "
+                  f"{d['drift_pct']:>+5.1f}% {str(d['score']):>6} {d['action']:>5}")
+
+    plan = report['plan']
+    if plan['needs_rebalance']:
+        print(f"\n  调仓建议:")
+        for s in plan['sells']:
+            print(f"  🔴 卖出 {s['name']} {s['sell_shares']}份 — {s['reason']}")
+        for b in plan['buys']:
+            print(f"  🟢 买入 {b['name']} {b['buy_shares']}份 — {b['reason']}")
+        print(f"\n  调仓后现金: {plan['cash_after_plan']:.0f}份")
+    else:
+        print(f"\n  ✅ {plan['reason']}")
+
+    print("=" * 65)
+
 
     def print_history(self, limit: int = 20):
         """打印完整操作历史"""

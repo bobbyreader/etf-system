@@ -703,6 +703,45 @@
     flex-shrink: 0;
   }
 
+  .rebalance-card {
+    border-left: 3px solid var(--accent);
+  }
+  .rebalance-ok {
+    color: #4ade80;
+    font-size: 14px;
+    padding: 8px 0;
+  }
+  .rebalance-drift {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 0;
+    font-size: 12px;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+  }
+  .rebalance-drift .drift-level {
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .drift-over { background: rgba(239,68,68,0.2); color: #f87171; }
+  .drift-under { background: rgba(74,222,128,0.2); color: #4ade80; }
+  .rebalance-action {
+    display: flex;
+    gap: 8px;
+    padding: 6px 0;
+    font-size: 12px;
+  }
+  .rebalance-action .tag {
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+  }
+  .tag-sell { background: rgba(239,68,68,0.2); color: #f87171; }
+  .tag-buy { background: rgba(74,222,128,0.2); color: #4ade80; }
+  .tag-skip { background: rgba(255,255,255,0.08); color: var(--text-secondary); }
+
   .position-row {
     display: flex;
     align-items: center;
@@ -1248,6 +1287,11 @@
       <div id="allocBars"></div>
       <div id="allocLegend"></div>
     </div>
+    <div class="portfolio-card rebalance-card">
+      <div class="stat-label">定期再平衡</div>
+      <div id="rebalanceStatus"></div>
+      <div id="rebalancePlan"></div>
+    </div>
   </div>
 
   <!-- Grid Status -->
@@ -1569,6 +1613,65 @@
     $('#allocLegend').innerHTML = legendHtml;
   }
 
+  // ── Render Rebalance ──
+  function renderRebalance(report) {
+    if (!report) {
+      $('#rebalanceStatus').innerHTML = '<div class="empty-state">加载中...</div>';
+      $('#rebalancePlan').innerHTML = '';
+      return;
+    }
+
+    const r = report.report || report;
+    const needs = r.needs_rebalance;
+
+    // 状态头
+    if (!needs) {
+      $('#rebalanceStatus').innerHTML = '<div class="rebalance-ok">✅ 配置正常，无需再平衡</div>';
+    } else {
+      const driftCount = r.drifts ? r.drifts.length : 0;
+      $('#rebalanceStatus').innerHTML = `<div style="color:#f87171;font-size:13px">⚠️ 检测到${driftCount}项漂移</div>`;
+    }
+
+    // 漂移列表
+    let html = '';
+    if (r.drifts && r.drifts.length > 0) {
+      for (const d of r.drifts) {
+        const level = d.level || '';
+        const lvlClass = level.includes('不足') ? 'drift-under' : 'drift-over';
+        const score = d.score && d.score !== 'N/A' ? `${d.score}` : '';
+        html += `<div class="rebalance-drift">
+          <span class="drift-level ${lvlClass}">${level}</span>
+          <span style="flex:1;color:var(--text)">${d.name}</span>
+          <span style="color:var(--text-secondary)">${d.current_pct}%/${d.target_pct}%</span>
+          <span style="color:${d.drift_pct > 0 ? '#f87171' : '#4ade80'}">${d.drift_pct > 0 ? '+' : ''}${d.drift_pct}%</span>
+          ${score ? `<span style="color:var(--text-secondary)">${score}</span>` : ''}
+        </div>`;
+      }
+    }
+
+    // 调仓计划
+    const plan = r.plan || {};
+    if (plan.needs_rebalance) {
+      html += '<div style="margin-top:8px;font-size:12px;color:var(--text-secondary)">调仓建议:</div>';
+      for (const s of (plan.sells || [])) {
+        html += `<div class="rebalance-action">
+          <span class="tag tag-sell">卖</span>
+          <span style="color:var(--text)">${s.name} ${s.sell_shares}份</span>
+          <span style="color:var(--text-secondary);flex:1">${s.reason || ''}</span>
+        </div>`;
+      }
+      for (const b of (plan.buys || [])) {
+        html += `<div class="rebalance-action">
+          <span class="tag tag-buy">买</span>
+          <span style="color:var(--text)">${b.name} ${b.buy_shares}份</span>
+          <span style="color:var(--text-secondary);flex:1">${b.reason || ''}</span>
+        </div>`;
+      }
+    }
+
+    $('#rebalancePlan').innerHTML = html || '<div class="empty-state">无漂移</div>';
+  }
+
   // ── Render Grid ──
   function renderGrid() {
     // 华宝油气网格参数
@@ -1589,15 +1692,17 @@
     btn.classList.add('loading');
 
     try {
-      const [statusRes, pfRes] = await Promise.all([
+      const [statusRes, pfRes, rbRes] = await Promise.all([
         fetch('/status.json'),
-        fetch('/portfolio.json').catch(() => null)
+        fetch('/portfolio.json').catch(() => null),
+        fetch('/rebalance.json').catch(() => null)
       ]);
 
       if (!statusRes.ok) throw new Error('API error');
 
       const status = await statusRes.json();
       const portfolio = pfRes && pfRes.ok ? await pfRes.json() : null;
+      const rebalance = rbRes && rbRes.ok ? await rbRes.json() : null;
 
       allSignals = status.signals || [];
 
@@ -1608,6 +1713,7 @@
       renderSignals(allSignals);
       renderPortfolio(portfolioData);
       renderAllocation(portfolioData);
+      renderRebalance(rebalance);
 
       const now = new Date();
       $('#lastUpdate').textContent = now.toLocaleTimeString('zh-CN', {

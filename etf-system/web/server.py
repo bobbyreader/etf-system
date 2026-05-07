@@ -14,7 +14,7 @@ from flask import Flask, render_template, jsonify, request
 
 from strategies.valuation import ValuationEngine
 from strategies.grid_engine import GridEngine, GridConfig
-from portfolio.manager import PortfolioManager
+from portfolio.manager import PortfolioManager, RebalanceEngine
 
 
 app = Flask(__name__)
@@ -320,6 +320,28 @@ def grid_json():
     return jsonify({
         'generated': datetime.now().isoformat(),
         'grids': grids,
+    })
+
+
+@app.route('/rebalance.json')
+def rebalance_json():
+    """定期再平衡诊断报告"""
+    pm = PortfolioManager(data_dir=str(DATA_DIR))
+    engine = ValuationEngine(data_dir=str(DATA_DIR))
+
+    # 收集所有品种估值信号
+    valuations = {}
+    for sig in engine.generate_all_signals().to_dict('records'):
+        name = sig.get('品种')
+        if name:
+            valuations[name] = sig
+
+    re = RebalanceEngine(pm, valuations)
+    report = re.get_rebalance_report()
+
+    return jsonify({
+        'generated': datetime.now().isoformat(),
+        'report': report,
     })
 
 
