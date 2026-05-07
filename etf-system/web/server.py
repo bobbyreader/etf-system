@@ -67,12 +67,24 @@ def status_json():
                 'note': '10年滚动窗口分位',
             },
             'ma_trend': row.get('均线趋势'),
+            'zone': row.get('估值区间', ''),
+            'zone_emoji': row.get('估值emoji', ''),
+            'zone_color': row.get('估值color', ''),
+            'advice': row.get('投资建议', ''),
+            'e_note': row.get('E大原话', ''),
+            'max_drop_detailed': row.get('最大跌幅详细', {}),
         })
 
     # 汇总
     buys = [s for s in signals if s['action'] == 'BUY']
     sells = [s for s in signals if s['action'] == 'SELL']
     pcts = [s['pct'] for s in signals if not s['score'].startswith('需')]
+
+    # 估值区间分布
+    zone_counts = {}
+    for s in signals:
+        z = s.get('zone', '未知')
+        zone_counts[z] = zone_counts.get(z, 0) + 1
 
     return jsonify({
         'generated': datetime.now().isoformat(),
@@ -84,8 +96,36 @@ def status_json():
             'avg_pct': round(sum(pcts) / len(pcts), 1) if pcts else 50.0,
             'buy_names': [s['name'] for s in buys],
             'sell_names': [s['name'] for s in sells],
+            'zone_distribution': zone_counts,
+            'market_outlook': _build_market_outlook(signals, zone_counts),
         }
     })
+
+
+def _build_market_outlook(signals, zone_counts):
+    """根据估值区间分布生成市场展望"""
+    if not signals:
+        return '暂无数据'
+
+    diamond = zone_counts.get('钻石坑', 0)
+    gold = zone_counts.get('黄金坑', 0)
+    low = zone_counts.get('正常偏低', 0)
+    high = zone_counts.get('正常偏高', 0)
+    rich = zone_counts.get('高估', 0) + zone_counts.get('极度高估', 0)
+
+    total = len(signals)
+    if diamond >= 1:
+        return '💎 市场处于钻石坑区域，是历史性战略建仓机会。保持信心，持续买入。'
+    elif gold >= 2:
+        return '🥇 市场整体低估，遍地黄金。低估品种积极买入，高估品种分批止盈。'
+    elif rich >= 2:
+        return '⚠️ 市场整体高估，注意风险。高估品种逐步清仓，保留现金等待机会。'
+    elif high >= 3:
+        return '⚖️ 市场估值偏高，部分品种进入高估区间。谨慎加仓，准备止盈。'
+    elif low >= 3:
+        return '📊 市场估值正常偏低，保持耐心持有。等待估值回归或继续积累便宜筹码。'
+    else:
+        return '📊 市场整体估值处于正常区间，均衡配置，耐心等待。'
 
 
 @app.route('/portfolio.json')

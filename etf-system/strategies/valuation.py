@@ -157,6 +157,94 @@ class ValuationEngine:
 
     # ─── 分位计算 ────────────────────────────────────────────────────
 
+    # ─── 估值区间标签 ──────────────────────────────────────────────
+
+    ZONE_LABELS = {
+        (0, 15):   {'zone': '钻石坑', 'emoji': '💎', 'color': '#c9a84c',
+                      'advice': '极度低估，钻石坑！历史大底区域，战略建仓期。不惧短期浮亏，持续买入。',
+                      'e_note': '这种情况只有在市场最绝望的时候才会出现。'},
+        (15, 30):  {'zone': '黄金坑', 'emoji': '🥇', 'color': '#f0c040',
+                      'advice': '低估区间，黄金坑。历史底部区域，值得积极买入。',
+                      'e_note': '非常好的买入机会，性价比极高。'},
+        (30, 50):  {'zone': '正常偏低', 'emoji': '📊', 'color': '#5bc8af',
+                      'advice': '估值正常偏低，保持持有。已有仓位耐心等待牛市。',
+                      'e_note': '正常偏低，保持现有仓位。'},
+        (50, 70):  {'zone': '正常偏高', 'emoji': '⚖️', 'color': '#e8a020',
+                      'advice': '估值正常偏高，谨慎加仓。警惕市场过热。',
+                      'e_note': '正常偏高，提高警惕。'},
+        (70, 85):  {'zone': '高估', 'emoji': '🔥', 'color': '#f06c6c',
+                      'advice': '进入高估区间，分批止盈。开始卖出多余仓位。',
+                      'e_note': '高估了，慢慢卖出。'},
+        (85, 100): {'zone': '极度高估', 'emoji': '⚠️', 'color': '#cc3333',
+                      'advice': '极度高估区域，尽快清仓。历史顶部区间，风险极大。',
+                      'e_note': '非常贵了，大比例减仓。'},
+    }
+
+    def get_valuation_zone(self, score: float) -> dict:
+        """根据综合分位返回估值区间信息"""
+        for (low, high), info in self.ZONE_LABELS.items():
+            if low <= score < high:
+                return info
+        if score <= 0:
+            return self.ZONE_LABELS[(0, 15)]
+        return self.ZONE_LABELS[(85, 100)]
+
+    # ─── 最大跌幅动态估算 ─────────────────────────────────────────
+
+    def estimate_max_drop(self, 品种名: str, score: float,
+                          price: float, pe_df: pd.DataFrame = None) -> dict:
+        """
+        E大最大跌幅估算三维度：
+        1. 历史纵向：当前PE vs 历史最低PE
+        2. 世界横向：全球同类指数最低估值对比
+        3. 价格经验：80%最大跌幅法则
+        """
+        drops = []
+        sources = []
+
+        # 维度1: 历史纵向
+        if pe_df is not None and not pe_df.empty:
+            min_pe = float(pe_df['TTM'].min())
+            cur_pe = float(pe_df.iloc[-1]['TTM'])
+            if min_pe > 0 and cur_pe > min_pe:
+                ratio = min_pe / cur_pe
+                drop = (1 - ratio) * 100
+                # 从当前价格折算
+                est_drop = drop * 0.6  # 保守系数
+                drops.append(est_drop)
+                sources.append(f'历史最低PE: {min_pe:.1f} vs 当前 {cur_pe:.1f}')
+
+        # 维度2: 品种特性调整
+        name_drop = {
+            '华宝油气': 45, '恒生ETF': 30, '黄金ETF': 20,
+            '德国30': 35, '50ETF': 25, '中证500ETF': 30,
+            '深100ETF': 30, '中证红利': 25, '180ETF': 25,
+            '养老产业': 35,
+        }
+        base_drop = name_drop.get(品种名, 30)
+        drops.append(base_drop)
+
+        # 维度3: 分位加成
+        if score < 15:
+            drops.append(base_drop * 0.8)
+        elif score < 30:
+            drops.append(base_drop * 1.0)
+        elif score < 50:
+            drops.append(base_drop * 1.2)
+
+        # 综合估算
+        avg_drop = sum(drops) / len(drops)
+        # E大留安全余量，再加10%
+        est_drop_pct = min(avg_drop * 1.1, 80)
+        return {
+            'max_drop_pct': round(est_drop_pct, 1),
+            'max_drop_display': f'-{round(est_drop_pct, 0):.0f}%',
+            'sources': sources,
+            'note': '估算值仅供参考，实际跌幅可能更大或更小',
+        }
+
+    # ─── 分位计算 ────────────────────────────────────────────────────
+
     def calc_percentile(self, pe_df: pd.DataFrame, current_pe: float,
                        col: str = 'TTM') -> float:
         """
@@ -278,6 +366,10 @@ class ValuationEngine:
         price = self.fetch_etf_price(品种名)
         # 均线趋势
         ma_trend = self.calc_ma_trend(品种名, 250)
+        # 估值区间
+        zone = self.get_valuation_zone(score)
+        # 动态跌幅估算
+        dyn_drop = self.estimate_max_drop(品种名, score, price, pe_df)
 
         return {
             '品种': 品种名,
@@ -292,10 +384,16 @@ class ValuationEngine:
             '操作': action['action'],
             '份数': action['shares'],
             '强度': action['intensity'],
-            '最大跌幅': max_drop,
+            '最大跌幅': dyn_drop['max_drop_display'],
+            '最大跌幅详细': dyn_drop,
             '数据日期': date,
             '历史': stats,
             '均线趋势': ma_trend,
+            '估值区间': zone['zone'],
+            '估值emoji': zone['emoji'],
+            '估值color': zone['color'],
+            '投资建议': zone['advice'],
+            'E大原话': zone['e_note'],
         }
 
     def _commodity_signal(self, 品种名: str, info: dict) -> dict:
@@ -314,9 +412,15 @@ class ValuationEngine:
             '份数': 0,
             '强度': '参考宏观',
             '最大跌幅': 'N/A',
+            '最大跌幅详细': {},
             '数据日期': datetime.now().strftime('%Y-%m-%d'),
             'ETF价格': price,
             'note': info.get('note', ''),
+            '估值区间': '宏观判断',
+            '估值emoji': '🔮',
+            '估值color': '#888',
+            '投资建议': info.get('note', '参考宏观周期决定买卖时机'),
+            'E大原话': '大宗商品参考金银比/美元指数/原油供需宏观判断',
         }
 
     def generate_all_signals(self, universe: list = None) -> pd.DataFrame:
@@ -338,10 +442,14 @@ class ValuationEngine:
         for _, row in df.iterrows():
             action = row['操作']
             icon = {'BUY': '🟢', 'SELL': '🔴', 'HOLD': '🟡', '手动': '⚪'}.get(action, '⚪')
-            print(f"\n  {icon} {row['品种']} ({row['代码']})")
-            print(f"     PE_TTM={row['PE_TTM']}  PE分位={row['PE分位']}  PB分位={row['PB分位']}")
+            zone_icon = row.get('估值emoji', '📊')
+            print(f"\n  {zone_icon} {row['品种']} ({row['代码']})")
+            print(f"     估值区间: {row.get('估值区间', 'N/A')}  |  PE_TTM={row['PE_TTM']}  PE分位={row['PE分位']}  PB分位={row['PB分位']}")
             print(f"     综合分位={row['综合分位']}  →  [{action}] {row['强度']} {row['份数']}份")
             print(f"     最大跌幅估算: {row['最大跌幅']}  |  日期: {row['数据日期']}")
+            advice = row.get('投资建议', '')
+            if advice:
+                print(f"     💬 投资建议: {advice[:50]}...")
             if row.get('历史') and isinstance(row['历史'], dict):
                 h = row['历史']
                 print(f"     历史区间: PE {h.get('pe_ttm_min','?')}-{h.get('pe_ttm_max','?')}  "

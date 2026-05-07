@@ -600,6 +600,35 @@
 
   .ma-pill strong { font-family: 'JetBrains Mono', monospace; }
 
+  /* ── Detail Advice ── */
+  .detail-advice {
+    margin: 14px 20px;
+    padding: 14px 16px;
+    background: linear-gradient(135deg, rgba(201,168,76,0.08) 0%, rgba(201,168,76,0.03) 100%);
+    border: 1px solid rgba(201,168,76,0.15);
+    border-radius: var(--radius-sm);
+  }
+  .detail-advice-label {
+    font-size: 11px;
+    color: var(--gold);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+    font-weight: 500;
+  }
+  .detail-advice-text {
+    font-size: 13px;
+    color: var(--text-primary);
+    line-height: 1.65;
+    margin-bottom: 8px;
+  }
+  .detail-advice-e {
+    font-size: 11px;
+    color: var(--text-secondary);
+    font-style: italic;
+    line-height: 1.5;
+  }
+
   /* ── Portfolio ── */
   .portfolio-section {
     display: grid;
@@ -1113,6 +1142,7 @@
       <div id="detailHistRows"></div>
     </div>
     <div class="detail-ma" id="detailMA"></div>
+    <div id="detailAdvice"></div>
   </div>
 
   <!-- Execute Modal -->
@@ -1239,6 +1269,9 @@
     const avgCls = avg <= 30 ? 'buy' : avg <= 70 ? 'neutral' : 'sell';
     const avgLabel = avg <= 30 ? '低估' : avg <= 70 ? '中性' : '高估';
 
+    const outlook = summary.market_outlook || '';
+    const zones = summary.zone_distribution || {};
+
     $('#marketBar').innerHTML = `
       <div class="stat-card">
         <div class="stat-label">市场综合分位</div>
@@ -1255,10 +1288,9 @@
         <div class="stat-value sell">${summary.sell}</div>
         <div class="stat-sub">${(summary.sell_names||[]).slice(0,2).join(' / ') || '无'}</div>
       </div>
-      <div class="stat-card">
-        <div class="stat-label">监控品种</div>
-        <div class="stat-value neutral">${summary.total}</div>
-        <div class="stat-sub">全量品种</div>
+      <div class="stat-card" style="grid-column: span 2;">
+        <div class="stat-label">市场展望</div>
+        <div class="stat-value" style="font-size:12px;line-height:1.5;color:var(--text-secondary)">${outlook}</div>
       </div>
     `;
   }
@@ -1281,6 +1313,9 @@
       const isSelected = s.name === selectedName;
       const ma = s.ma_trend;
       const maInfo = maZone(ma ? ma.zone : null);
+      const zoneEmoji = s.zone_emoji || '📊';
+      const zoneName = s.zone || '';
+      const zoneColor = s.zone_color || 'var(--text-secondary)';
 
       return `
       <div class="signal-card ${actionClass}${isSelected ? ' selected' : ''}"
@@ -1291,7 +1326,10 @@
             <div class="signal-name">${s.name}</div>
             <div class="signal-code">${s.code}</div>
           </div>
-          <span class="action-badge ${actionClass}">${actionLabel(s.action)}</span>
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
+            <span class="action-badge ${actionClass}">${actionLabel(s.action)}</span>
+            ${zoneName ? `<span style="font-size:10px;color:${zoneColor};letter-spacing:0.5px">${zoneEmoji} ${zoneName}</span>` : ''}
+          </div>
         </div>
         <div class="signal-metrics">
           <div class="metric">
@@ -1337,9 +1375,15 @@
 
     const ma = s.ma_trend;
     const maInfo = maZone(ma ? ma.zone : null);
+    const zoneEmoji = s.zone_emoji || '📊';
+    const zoneName = s.zone || '';
+    const zoneColor = s.zone_color || 'var(--gold)';
+    const advice = s.advice || '';
+    const eNote = s.e_note || '';
 
     $('#detailTitle').textContent = `${s.name} (${s.code})`;
     $('#detailGrid').innerHTML = `
+      <div class="detail-stat"><div class="detail-stat-label">估值区间</div><div class="detail-stat-value" style="color:${zoneColor}">${zoneEmoji} ${zoneName}</div></div>
       <div class="detail-stat"><div class="detail-stat-label">PE-TTM</div><div class="detail-stat-value">${fmt(s.pe_ttm)||'—'}</div></div>
       <div class="detail-stat"><div class="detail-stat-label">PE分位</div><div class="detail-stat-value">${s.pe_pct||'—'}</div></div>
       <div class="detail-stat"><div class="detail-stat-label">PB</div><div class="detail-stat-value">${fmt(s.pb)||'—'}</div></div>
@@ -1348,6 +1392,7 @@
       <div class="detail-stat"><div class="detail-stat-label">ETF价格</div><div class="detail-stat-value">${s.price != null ? fmt(s.price,3) : '—'}</div></div>
       <div class="detail-stat"><div class="detail-stat-label">操作</div><div class="detail-stat-value" style="color:var(--${s.action==='BUY'?'buy':s.action==='SELL'?'sell':'hold'})">${actionLabel(s.action)}</div></div>
       <div class="detail-stat"><div class="detail-stat-label">最大跌幅</div><div class="detail-stat-value">${s.max_drop||'—'}</div></div>
+      <div class="detail-stat"><div class="detail-stat-label">均线趋势</div><div class="detail-stat-value">${ma ? (ma.zone||'—') : '—'}</div></div>
     `;
 
     const hist = s.history || {};
@@ -1367,6 +1412,18 @@
         <div class="ma-pill"><span>区间</span><strong style="color:${maInfo.cls==='high'?'var(--sell)':maInfo.cls==='low'?'var(--buy)':'var(--blue)'}">${ma.zone||'—'}</strong></div>`;
     }
     $('#detailMA').innerHTML = maHTML;
+
+    // 投资建议
+    let adviceHTML = '';
+    if (advice || eNote) {
+      adviceHTML = `
+        <div class="detail-advice">
+          <div class="detail-advice-label">💬 投资建议</div>
+          <div class="detail-advice-text">${advice}</div>
+          ${eNote ? `<div class="detail-advice-e">「${eNote}」— E大</div>` : ''}
+        </div>`;
+    }
+    $('#detailAdvice').innerHTML = adviceHTML;
 
     $('#detailPanel').classList.add('visible');
     setTimeout(() => {
